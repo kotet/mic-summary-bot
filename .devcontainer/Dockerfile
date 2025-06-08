@@ -24,6 +24,7 @@ RUN apt-get update --no-install-recommends \
         git \
         ssh \
         bash-completion \
+        sqlite3 \
     && apt-get clean && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 ARG GO_VERSION=1.24.3
