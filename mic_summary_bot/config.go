@@ -68,6 +68,7 @@ func DefaultConfig() *Config {
 		Gemini: GeminiConfig{
 			APIKey:           "",
 			ScreeningModel:   "gemini-2.0-flash",
+			SummerizingModel: "gemini-2.5-flash",
 			MaxTokens:        65535,
 			RetryCount:       3,
 			RetryIntervalSec: 5,
@@ -89,7 +90,19 @@ Webページに含まれる添付資料 {{ len .Documents }}件:
 {{ range .Documents }}
 - URL: {{ .URL }}, Size: {{ .Size }} bytes{{ end }}
 `,
-			SummerizingPrompt: "",
+			SummerizingPrompt: `あなたは「総務省会議議事録要約ツール」です。
+  1) 会議のメタ情報を含むWebページ(HTMLテキスト)
+  2) 議事録や参考資料を含むPDFファイル
+を渡すため、各PDFファイルの要約を出力し、それらの内容をもとに会議全体を要約してください。
+
+【ドキュメント要約出力形式】
+- metadata: タイトル、日時、出席者、開催場所、議題などのメタ情報
+- keyPoints: 重要な発言や決定事項を3~5項目列挙
+- summary: 文書の要点を日本語で簡潔にまとめる
+
+【最終要約出力形式】
+- final_summary: 会議の特に重要な部分を取り上げ、ですます調、3~5文、全体で250文字程度の日本語にまとめる
+`,
 		},
 		Mastodon: MastodonConfig{
 			InstanceURL: "",

@@ -63,6 +63,7 @@ func (client *GenAIClient) IsWorthSummarizing(htmlAndDocs *HTMLandDocuments, pro
 				},
 			},
 			PropertyOrdering: []string{"criteria", "final_result"},
+			Required:         []string{"final_result"},
 		},
 	}
 
