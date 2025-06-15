@@ -20,11 +20,13 @@ type RSSConfig struct {
 }
 
 type GeminiConfig struct {
-	APIKey           string `yaml:"api_key"`
-	Model            string `yaml:"model"`
-	MaxTokens        int    `yaml:"max_tokens"`
-	RetryCount       int    `yaml:"retry_count"`
-	RetryIntervalSec int    `yaml:"retry_interval_sec"`
+	APIKey            string `yaml:"api_key"`
+	Model             string `yaml:"model"`
+	MaxTokens         int    `yaml:"max_tokens"`
+	RetryCount        int    `yaml:"retry_count"`
+	RetryIntervalSec  int    `yaml:"retry_interval_sec"`
+	ScreeningPrompt   string `yaml:"screening_prompt"`
+	SummerizingPrompt string `yaml:"summizing_prompt"`
 }
 
 type MastodonConfig struct {
