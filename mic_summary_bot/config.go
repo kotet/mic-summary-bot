@@ -68,7 +68,7 @@ func DefaultConfig() *Config {
 		Gemini: GeminiConfig{
 			APIKey:           "",
 			ScreeningModel:   "gemini-2.0-flash",
-			SummerizingModel: "gemini-2.5-flash",
+			SummerizingModel: "gemini-2.5-flash-preview-05-20",
 			MaxTokens:        65535,
 			RetryCount:       3,
 			RetryIntervalSec: 5,
