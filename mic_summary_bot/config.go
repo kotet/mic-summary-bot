@@ -31,8 +31,11 @@ type GeminiConfig struct {
 }
 
 type MastodonConfig struct {
-	InstanceURL string `yaml:"instance_url"`
-	AccessToken string `yaml:"access_token"`
+	InstanceURL  string `yaml:"instance_url"`
+	AccessToken  string `yaml:"access_token"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	PostTemplate string `yaml:"post_template"`
 }
 
 type StorageConfig struct {
@@ -105,8 +108,15 @@ Webページに含まれる添付資料 {{ len .Documents }}件:
 `,
 		},
 		Mastodon: MastodonConfig{
-			InstanceURL: "",
-			AccessToken: "",
+			InstanceURL:  "",
+			ClientID:     "",
+			ClientSecret: "",
+			AccessToken:  "",
+			PostTemplate: `{{ .Title }}
+
+			{{ .Summary }}
+
+			{{ .URL }}`,
 		},
 		Storage: StorageConfig{
 			DownloadDir:   "./mic_summary_bot/downloads",
