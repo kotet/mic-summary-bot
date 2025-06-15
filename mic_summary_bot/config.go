@@ -113,7 +113,7 @@ Webページに含まれる添付資料 {{ len .Documents }}件:
 			KeepLocalCopy: true,
 		},
 		Database: DatabaseConfig{
-			Path: "./mic_summary_bot.db",
+			Path: "./mic_summary_bot/database.sqlite",
 		},
 	}
 }
