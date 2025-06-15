@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/text/encoding/japanese"
 )
 
 // GetHTMLSummary は指定されたURLからHTMLを取得し、パースしてHTMLSummary構造体を返します。
-func GetHTMLSummary(targetURL string) (*HTMLSummary, error) {
+func GetHTMLSummary(targetURL string) (*HTMLandDocuments, error) {
 	resp, err := http.Get(targetURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get HTML from %s: %w", targetURL, err)
@@ -28,7 +29,17 @@ func GetHTMLSummary(targetURL string) (*HTMLSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	htmlContent := string(bodyBytes)
+	// read as Shift-JIS
+	shiftJISReader := japanese.ShiftJIS.NewDecoder().Reader(bytes.NewReader(bodyBytes))
+	htmlBytes, err := io.ReadAll(shiftJISReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Shift-JIS to UTF-8: %w", err)
+	}
+
+	htmlContent, err := extractContentsBody(string(htmlBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract contentsBody: %w", err)
+	}
 
 	baseURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -36,15 +47,54 @@ func GetHTMLSummary(targetURL string) (*HTMLSummary, error) {
 	}
 
 	// parseHTMLForDocumentsを呼び出し、getDocumentSizeを渡す
-	documents, err := parseHTMLForDocuments(htmlContent, baseURL, getDocumentSize)
+	documents, err := parseHTMLForDocuments(string(htmlContent), baseURL, getDocumentSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML and extract documents: %w", err)
 	}
 
-	return &HTMLSummary{
+	return &HTMLandDocuments{
 		HTMLContent: htmlContent,
 		Documents:   documents,
 	}, nil
+}
+
+func extractContentsBody(htmlContent string) ([]byte, error) {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+	// extract .contentsBody
+	var contentsBody *html.Node
+
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "div" {
+			for _, a := range n.Attr {
+				if a.Key == "class" && a.Val == "contentsBody" {
+					contentsBody = n
+					return
+				}
+			}
+		}
+		if contentsBody == nil {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				f(c)
+			}
+		}
+	}
+
+	f(doc)
+
+	if contentsBody == nil {
+		return nil, fmt.Errorf("contentsBody not found")
+	}
+	var buf bytes.Buffer
+	w := io.Writer(&buf)
+	err = html.Render(w, contentsBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render contentsBody: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // parseHTMLForDocuments はHTMLコンテンツをパースし、PDFドキュメントのURLを抽出します。

@@ -6,8 +6,8 @@ type Document struct {
 	Size int64 // バイト単位
 }
 
-// HTMLSummary はHTMLコンテンツとその中に添付されているドキュメントのリストを保持します。
-type HTMLSummary struct {
-	HTMLContent string
+// HTMLandDocuments はHTMLコンテンツとその中に添付されているドキュメントのリストを保持します。
+type HTMLandDocuments struct {
+	HTMLContent []byte
 	Documents   []Document
 }

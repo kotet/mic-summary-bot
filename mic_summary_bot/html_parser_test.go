@@ -38,14 +38,12 @@ func TestParseHTMLForDocuments_OnlyPDF(t *testing.T) {
 
 	documents, err := parseHTMLForDocuments(string(htmlContent), baseURL, dummySizeFetcher)
 	assert.NoError(t, err)
-	assert.Len(t, documents, 4, "Should find 4 PDF documents")
-
 	expectedURLs := []string{
-		"https://www.soumu.go.jp/main_content/001014570.pdf",
-		"https://www.soumu.go.jp/main_content/001014571.pdf",
-		"https://www.soumu.go.jp/main_content/001014572.pdf",
-		"https://www.soumu.go.jp/main_content/001014943.pdf",
+		"https://www.soumu.go.jp/main_content/001014168.pdf",
+		"https://www.soumu.go.jp/main_content/001014169.pdf",
+		"https://www.soumu.go.jp/main_content/001014170.pdf",
 	}
+	assert.Len(t, documents, len(expectedURLs), "Should find %d PDF documents", len(expectedURLs))
 	for i, doc := range documents {
 		assert.Equal(t, expectedURLs[i], doc.URL)
 		assert.Equal(t, int64(12345), doc.Size) // dummySizeFetcherが返すサイズ
