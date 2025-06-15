@@ -89,14 +89,6 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 		},
 	}
 
-	var budget int32 = 0
-	if strings.HasPrefix(client.SummarizingModel, "gemini-2.5") {
-		modelConfig.ThinkingConfig = &genai.ThinkingConfig{
-			ThinkingBudget:  &budget,
-			IncludeThoughts: false,
-		}
-	}
-
 	t, err := template.New("prompt").Parse(promptTemplate)
 	if err != nil {
 		return SummerizeResult{}, fmt.Errorf("failed to parse prompt template: %w", err)
