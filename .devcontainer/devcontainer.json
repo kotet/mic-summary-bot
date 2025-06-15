@@ -14,6 +14,9 @@
                 },
                 "terminal.integrated.defaultProfile.linux": "bash",
                 "editor.tabSize": 2,
+                "go.buildFlags": [
+                    "-tags=integration"
+                ]
             },
             "extensions": [
                 "visualstudioexptteam.vscodeintellicode",
