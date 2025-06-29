@@ -4,7 +4,7 @@ This project is a Mastodon bot written in Go.
 
 ### Instructions for the Agent
 
-- **Language:** Please respond in English.
+- **Language:** Please respond in Japanese.
 - **Design Documents:** Project design documents are in the `docs/` directory. Be sure to review them before starting development.
 - **Development Language:** Use Go. Follow Go idioms and conventions (e.g., effective naming, simplicity, zero values).
 - **Building:** Use `make` for all build tasks. Do not run build commands directly.

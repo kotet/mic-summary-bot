@@ -103,7 +103,7 @@ func (r *ItemRepository) Close() error {
 	return r.db.Close()
 }
 
-func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error) error {
+func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Println(err.Error())
@@ -205,6 +205,13 @@ func (r *ItemRepository) GetUnprocessedItems() ([]*Item, error) {
 	}
 
 	// If no unprocessed items, check for deferred items with retry attempts left
+	query = formatQuery(`
+	SELECT id, url, title, published_at, status, reason, retry_count, created_at
+	FROM items
+	WHERE status = ? AND retry_count < ?
+	ORDER BY published_at ASC
+	LIMIT 1;
+	`)
 	rows, err = r.db.Query(query, StatusDeferred, 3) // Assuming max 3 retries for deferred
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get deferred items: %w", err)

@@ -1,7 +1,6 @@
 package micsummarybot
 
 import (
-	"encoding/json"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -71,7 +70,7 @@ func LoadConfig(configPath string) (*Config, error) {
 
 func DefaultConfig() *Config {
 	var config Config
-	err := json.Unmarshal([]byte(exampleConfig), &config)
+	err := yaml.Unmarshal([]byte(exampleConfig), &config)
 	if err != nil {
 		panic(err)
 	}

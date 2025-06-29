@@ -7,8 +7,7 @@ import (
 
 type MICSummaryBot struct {
 	rssClient      *RSSClient
-	screener       *GenAIClient
-	summarizer     *GenAIClient
+	genAIClient    *GenAIClient
 	mastodonClient *MastodonClient
 	itemRepository *ItemRepository
 	config         *Config
@@ -20,20 +19,14 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 		return nil, fmt.Errorf("failed to create item repository: %w", err)
 	}
 
-	summarizer, err := NewGenAIClient(&config.Gemini, &config.Storage)
+	genAIClient, err := NewGenAIClient(&config.Gemini, &config.Storage)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create summarizer: %w", err)
-	}
-
-	screener, err := NewGenAIClient(&config.Gemini, &config.Storage)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create screener: %w", err)
+		return nil, fmt.Errorf("failed to create GenAI client: %w", err)
 	}
 
 	return &MICSummaryBot{
 		rssClient:      NewRSSClient(),
-		screener:       screener,
-		summarizer:     summarizer,
+		genAIClient:    genAIClient,
 		mastodonClient: NewMastodonClient(config),
 		itemRepository: itemRepository,
 		config:         config,
@@ -81,7 +74,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 
-	screeningResult, err := b.screener.IsWorthSummarizing(htmlAndDocs, b.config.Gemini.ScreeningPrompt)
+	screeningResult, err := b.genAIClient.IsWorthSummarizing(htmlAndDocs, b.config.Gemini.ScreeningPrompt)
 	if err != nil {
 		return fmt.Errorf("failed to screen item: %w", err)
 	}
@@ -89,7 +82,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 
 	switch screeningResult.FinalResult {
 	case WorthSummarizingYes:
-		summary, err := b.summarizer.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummerizingPrompt)
+		summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummerizingPrompt)
 		if err != nil {
 			return fmt.Errorf("failed to summarize content: %w", err)
 		}

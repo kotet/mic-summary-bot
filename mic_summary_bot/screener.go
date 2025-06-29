@@ -96,7 +96,7 @@ func (client *GenAIClient) IsWorthSummarizing(htmlAndDocs *HTMLandDocuments, pro
 			break // 成功したらループを抜ける
 		}
 		pkgLogger.Warn("Gemini API call failed", "attempt", i+1, "max_retry", client.MaxRetry+1, "error", err, "retrying_in_seconds", client.MaxRetry)
-		time.Sleep(time.Duration(client.MaxRetry) * time.Second)
+		time.Sleep(time.Duration(client.RetryIntervalSec) * time.Second)
 	}
 
 	if err != nil {
