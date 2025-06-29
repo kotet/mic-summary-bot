@@ -42,7 +42,7 @@ func NewMastodonClient(config *Config) (*MastodonClient, error) {
 }
 
 // PostSummary posts the summary result to Mastodon.
-func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
+func (c *MastodonClient) PostSummary(task Item, summary SummarizeResult) error {
 	var buf strings.Builder
 	err := c.template.Execute(&buf, PostInfo{
 		Title:   task.Title,

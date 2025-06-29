@@ -87,7 +87,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 
 	switch screeningResult.FinalResult {
 	case WorthSummarizingYes:
-		summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummerizingPrompt)
+		summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
 		if err != nil {
 			return fmt.Errorf("failed to summarize content: %w", err)
 		}

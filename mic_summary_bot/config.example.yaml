@@ -24,7 +24,7 @@ gemini:
     Webページに含まれる添付資料 {{ len .Documents }}件:
     {{ range .Documents }}
     - URL: {{ .URL }}, Size: {{ .Size }} bytes{{ end }}
-  summerizing_model: "gemini-2.5-flash-preview-05-20"
+  summarizing_model: "gemini-2.5-flash-preview-05-20"
   summeizing_prompt: |
     あなたは「総務省会議議事録要約ツール」です。
       1) 会議のメタ情報を含むWebページ(HTMLテキスト)

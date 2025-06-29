@@ -31,8 +31,8 @@ type GeminiConfig struct {
 	RetryIntervalSec  int    `yaml:"retry_interval_sec"`
 	ScreeningModel    string `yaml:"screening_model"`
 	ScreeningPrompt   string `yaml:"screening_prompt"`
-	SummerizingModel  string `yaml:"summerizing_model"`
-	SummerizingPrompt string `yaml:"summerizing_prompt"`
+	SummarizingModel  string `yaml:"summarizing_model"`
+	SummarizingPrompt string `yaml:"summarizing_prompt"`
 }
 
 type MastodonConfig struct {

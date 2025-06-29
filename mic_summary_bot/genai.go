@@ -30,7 +30,7 @@ func NewGenAIClient(gemini *GeminiConfig, storage *StorageConfig) (*GenAIClient,
 		MaxRetry:         gemini.RetryCount,
 		RetryIntervalSec: gemini.RetryIntervalSec,
 		ScreeningModel:   gemini.ScreeningModel,
-		SummarizingModel: gemini.SummerizingModel,
+		SummarizingModel: gemini.SummarizingModel,
 		DownloadDir:      storage.DownloadDir,
 		KeepLocalCopy:    storage.KeepLocalCopy,
 	}, nil
