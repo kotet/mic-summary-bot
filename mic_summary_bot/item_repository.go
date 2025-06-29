@@ -285,7 +285,7 @@ func (r *ItemRepository) AddItems(ctx context.Context, items []*gofeed.Item) (in
 				Status:      StatusProcessed,
 				Reason:      ReasonNone,
 				RetryCount:  0,
-				CreatedAt:   time.Now(),
+				CreatedAt:   time.Now().UTC(),
 			})
 			if err != nil {
 				return 0, err
@@ -298,7 +298,7 @@ func (r *ItemRepository) AddItems(ctx context.Context, items []*gofeed.Item) (in
 				Status:      StatusUnprocessed,
 				Reason:      ReasonNone,
 				RetryCount:  0,
-				CreatedAt:   time.Now(),
+				CreatedAt:   time.Now().UTC(),
 			})
 			if err != nil {
 				return 0, err
