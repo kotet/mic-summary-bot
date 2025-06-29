@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -106,7 +105,7 @@ func (r *ItemRepository) Close() error {
 func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		log.Println(err.Error())
+		pkgLogger.Error("transaction error", "error", err)
 		return err
 	}
 	defer func() {
@@ -114,7 +113,7 @@ func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error
 			tx.Rollback()
 			panic(p) // re-throw panic after Rollback
 		} else if err != nil {
-			log.Println(err)
+			pkgLogger.Error("transaction rollback", "error", err)
 			tx.Rollback()
 		} else {
 			err = tx.Commit()
