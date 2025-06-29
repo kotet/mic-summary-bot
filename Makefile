@@ -5,6 +5,9 @@ all: examples-bot
 examples-bot: ./**/*.go
 	go build -o examples-bot examples/main.go
 
+run: examples-bot
+	/usr/bin/time -v ./examples-bot
+
 format:
 	go fmt ./...
 
