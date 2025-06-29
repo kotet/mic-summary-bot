@@ -19,7 +19,7 @@ func setupTestDB(t *testing.T) (*ItemRepository, func()) {
 	// Use in-memory SQLite for tests.
 	dbPath := ":memory:"
 
-	repo, err := NewItemRepository(dbPath)
+	repo, err := NewItemRepository(dbPath, 3) // Default retry count for tests
 
 	require.NoError(t, err, "NewItemRepository should not return an error")
 	require.NotNil(t, repo, "NewItemRepository should return a non-nil repository")
@@ -33,7 +33,7 @@ func setupTestDB(t *testing.T) (*ItemRepository, func()) {
 
 func TestNewItemRepository(t *testing.T) {
 	t.Run("in-memory database", func(t *testing.T) {
-		repo, err := NewItemRepository(":memory:")
+		repo, err := NewItemRepository(":memory:", 3) // Default retry count for tests
 		require.NoError(t, err)
 		require.NotNil(t, repo)
 		defer repo.Close()
@@ -61,7 +61,7 @@ func TestNewItemRepository(t *testing.T) {
 		defer os.RemoveAll(tempDir)
 
 		dbPath := filepath.Join(tempDir, "test.db")
-		repoFile, err := NewItemRepository(dbPath)
+		repoFile, err := NewItemRepository(dbPath, 3) // Default retry count for tests
 		require.NoError(t, err)
 		require.NotNil(t, repoFile)
 

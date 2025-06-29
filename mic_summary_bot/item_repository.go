@@ -47,7 +47,8 @@ type Item struct {
 
 // ItemRepository は items テーブルへの操作を提供する
 type ItemRepository struct {
-	db *sql.DB
+	db                    *sql.DB
+	maxDeferredRetryCount int
 }
 
 // formatQuery
@@ -59,7 +60,7 @@ func formatQuery(query string) string {
 
 // NewItemRepository は新しいItemRepositoryインスタンスを作成し、データベース接続を初期化します。
 // テーブルが存在しない場合は作成します。
-func NewItemRepository(dbPath string) (*ItemRepository, error) {
+func NewItemRepository(dbPath string, maxDeferredRetryCount int) (*ItemRepository, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -94,7 +95,7 @@ func NewItemRepository(dbPath string) (*ItemRepository, error) {
 		}
 	}
 
-	return &ItemRepository{db: db}, nil
+	return &ItemRepository{db: db, maxDeferredRetryCount: maxDeferredRetryCount}, nil
 }
 
 // Close はデータベース接続を閉じます。
@@ -211,7 +212,7 @@ func (r *ItemRepository) GetUnprocessedItems(ctx context.Context) ([]*Item, erro
 	ORDER BY published_at ASC
 	LIMIT 1;
 	`)
-	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, 3) // Assuming max 3 retries for deferred
+	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount) // Assuming max 3 retries for deferred
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get deferred items: %w", err)
 	}

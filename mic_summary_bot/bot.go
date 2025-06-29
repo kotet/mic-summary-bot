@@ -14,7 +14,7 @@ type MICSummaryBot struct {
 }
 
 func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
-	itemRepository, err := NewItemRepository(config.Database.Path)
+	itemRepository, err := NewItemRepository(config.Database.Path, config.Database.MaxDeferredRetryCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create item repository: %w", err)
 	}

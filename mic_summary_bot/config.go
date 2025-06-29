@@ -49,7 +49,8 @@ type StorageConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path string `yaml:"path"`
+	Path                string `yaml:"path"`
+	MaxDeferredRetryCount int    `yaml:"max_deferred_retry_count"`
 }
 
 // LoadConfig は指定されたパスから設定ファイルを読み込み、Config構造体にパースします。記述されていない項目はデフォルト値が使われます

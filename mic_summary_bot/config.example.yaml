@@ -63,3 +63,4 @@ storage:
   keep_local_copy: true
 database:
   path: "./mic_summary_bot/database.sqlite"
+  max_deferred_retry_count: 3
