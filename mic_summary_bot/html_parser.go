@@ -116,7 +116,7 @@ func parseHTMLForDocuments(htmlContent string, baseURL *url.URL, sizeFetcher fun
 						resolvedURL := resolveURL(baseURL, link)
 						size, err := sizeFetcher(resolvedURL) // sizeFetcherを使用
 						if err != nil {
-							fmt.Printf("Warning: Could not get size for %s: %v\n", resolvedURL, err)
+							pkgLogger.Warn("Could not get size", "url", resolvedURL, "error", err)
 							size = 0 // エラー時はサイズを0とする
 						}
 						documents = append(documents, Document{URL: resolvedURL, Size: size})
