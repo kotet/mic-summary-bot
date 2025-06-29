@@ -42,7 +42,7 @@ func NewMastodonClient(config *Config) (*MastodonClient, error) {
 }
 
 // PostSummary posts the summary result to Mastodon.
-func (c *MastodonClient) PostSummary(task Item, summary SummarizeResult) error {
+func (c *MastodonClient) PostSummary(ctx context.Context, task Item, summary SummarizeResult) error {
 	var buf strings.Builder
 	err := c.template.Execute(&buf, PostInfo{
 		Title:   task.Title,
@@ -57,7 +57,7 @@ func (c *MastodonClient) PostSummary(task Item, summary SummarizeResult) error {
 
 	// The character limit for Mastodon is 5000 characters by default, so we don't check it here.
 	// On posting error, the current post is skipped.
-	s, err := c.client.PostStatus(context.Background(), &mastodon.Toot{Status: status})
+	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status})
 	if err != nil {
 		pkgLogger.Error("Failed to post to Mastodon", "error", err)
 		return err

@@ -92,7 +92,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 			return fmt.Errorf("failed to summarize content: %w", err)
 		}
 
-		if err := b.mastodonClient.PostSummary(*item, summary); err != nil {
+		if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
 			return fmt.Errorf("failed to post to mastodon: %w", err)
 		}
 		item.Status = StatusProcessed
