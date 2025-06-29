@@ -135,14 +135,14 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 		if err != nil {
 			return SummerizeResult{}, fmt.Errorf("failed to download file: %w", err)
 		}
-		if !client.KeepLocalCopy {
-			defer os.Remove(localPath)
-		}
 		f, err := client.Client.Files.UploadFromPath(ctx, localPath, &genai.UploadFileConfig{})
 		if err != nil {
 			return SummerizeResult{}, fmt.Errorf("failed to upload file: %w", err)
 		}
 		parts = append(parts, genai.NewPartFromURI(f.URI, f.MIMEType))
+		if !client.KeepLocalCopy {
+			os.Remove(localPath)
+		}
 	}
 
 	parts = append(parts, genai.NewPartFromText(prompt))
