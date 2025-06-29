@@ -196,7 +196,7 @@ func TestItemRepository_AddItem(t *testing.T) {
 			makeGofeedItem("http://example.com/item2", "Item 2", timeMid),
 		}
 
-		err := repo.AddItems(itemsToAdd)
+		_, err := repo.AddItems(itemsToAdd)
 		require.NoError(t, err)
 
 		dbItem1 := getItemByUrl(t, repo.db, "http://example.com/item1")
@@ -238,7 +238,7 @@ func TestItemRepository_AddItem(t *testing.T) {
 			makeGofeedItem("http://example.com/newer", "Newer Article", timeFuture),            // Newer than timeMid
 		}
 
-		err = repo.AddItems(itemsToAdd)
+		_, err = repo.AddItems(itemsToAdd)
 		require.NoError(t, err)
 
 		// Verify duplicate was skipped (original item should remain unchanged)
@@ -275,7 +275,7 @@ func TestItemRepository_AddItem(t *testing.T) {
 		// Close DB to make the initial query for last published_at fail
 		repo.Close()
 
-		err := repo.AddItems(itemsToAdd)
+		_, err := repo.AddItems(itemsToAdd)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get last published_at")
 	})

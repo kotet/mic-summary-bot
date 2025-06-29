@@ -48,9 +48,18 @@ func (b *MICSummaryBot) UpdateItems(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch RSS feed: %w", err)
 	}
 
-	if err := b.itemRepository.AddItems(items); err != nil {
+	addedCount, err := b.itemRepository.AddItems(items)
+	if err != nil {
 		return fmt.Errorf("failed to add items to repository: %w", err)
 	}
+	slog.Info("Added new items", "count", addedCount)
+
+	unprocessedCount, err := b.itemRepository.CountUnprocessedItems()
+	if err != nil {
+		return fmt.Errorf("failed to count unprocessed items: %w", err)
+	}
+	slog.Info("Unprocessed items", "count", unprocessedCount)
+
 	slog.Info("Finish updating items")
 	return nil
 }

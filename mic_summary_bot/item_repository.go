@@ -237,9 +237,10 @@ func (r *ItemRepository) IsURLExists(url string) (bool, error) {
 	return count > 0, nil
 }
 
-// AddItem は新しいRSSアイテムをデータベースに追加します。
+// AddItems は新しいRSSアイテムをデータベースに追加します。
 // URLが既存のレコードと重複する場合、新規追加は行いません。
-func (r *ItemRepository) AddItems(items []*gofeed.Item) error {
+func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
+	addedCount := 0
 	// 最も新しいエントリを取得
 	lastPublishedAt, err := func() (*time.Time, error) {
 		lastResult, err := r.db.Query("SELECT published_at FROM items ORDER BY published_at DESC LIMIT 1;")
@@ -255,13 +256,13 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) error {
 		return lastPublishedAt, nil
 	}()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for _, item := range items {
 		exists, err := r.IsURLExists(item.Link)
 		if err != nil {
-			return fmt.Errorf("failed to check URL existence: %w", err)
+			return 0, fmt.Errorf("failed to check URL existence: %w", err)
 		}
 		if exists {
 			// 既に存在したらスキップ
@@ -280,7 +281,7 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) error {
 				CreatedAt:   time.Now(),
 			})
 			if err != nil {
-				return err
+				return 0, err
 			}
 		} else {
 			err = r.insert(&Item{
@@ -293,9 +294,20 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) error {
 				CreatedAt:   time.Now(),
 			})
 			if err != nil {
-				return err
+				return 0, err
 			}
+			addedCount++
 		}
 	}
-	return nil
+	return addedCount, nil
+}
+
+func (r *ItemRepository) CountUnprocessedItems() (int, error) {
+	query := `SELECT COUNT(*) FROM items WHERE status = ?;`
+	var count int
+	err := r.db.QueryRow(query, StatusUnprocessed).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
