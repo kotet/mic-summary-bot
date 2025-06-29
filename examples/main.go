@@ -12,6 +12,12 @@ import (
 func main() {
 	_ = godotenv.Load()
 
+	handlerOptions := &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, handlerOptions))
+	slog.SetDefault(logger)
+
 	ctx := context.Background()
 
 	config, err := micsummarybot.LoadConfig("config.yaml")

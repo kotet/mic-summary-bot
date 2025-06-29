@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -24,6 +25,7 @@ type DocumentSummary struct {
 
 type SummerizeResult struct {
 	Documents    []DocumentSummary `json:"documents"`
+	Omissibles   []string          `json:"omissibles"`
 	FinalSummary string            `json:"final_summary"`
 }
 
@@ -80,11 +82,17 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 						PropertyOrdering: []string{"metadata", "keyPoints", "summary"},
 					},
 				},
+				"omissibles": {
+					Type: genai.TypeArray,
+					Items: &genai.Schema{
+						Type: genai.TypeString,
+					},
+				},
 				"final_summary": {
 					Type: genai.TypeString,
 				},
 			},
-			PropertyOrdering: []string{"documents", "final_summary"},
+			PropertyOrdering: []string{"documents", "omissibles", "final_summary"},
 			Required:         []string{"final_summary"},
 		},
 	}
@@ -163,6 +171,8 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 
 	// LLMの応答をテキストとして取得
 	responseText := resp.Text()
+
+	slog.Debug("Gemini API response", "response", responseText)
 
 	var jsonResult SummerizeResult
 	err = json.Unmarshal([]byte(responseText), &jsonResult)
