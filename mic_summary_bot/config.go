@@ -32,7 +32,7 @@ type GeminiConfig struct {
 	ScreeningModel    string `yaml:"screening_model"`
 	ScreeningPrompt   string `yaml:"screening_prompt"`
 	SummerizingModel  string `yaml:"summerizing_model"`
-	SummerizingPrompt string `yaml:"summizing_prompt"`
+	SummerizingPrompt string `yaml:"summerizing_prompt"`
 }
 
 type MastodonConfig struct {
