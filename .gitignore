@@ -27,3 +27,6 @@ go.work.sum
 
 # database
 *.db
+data/
+
+config.yaml
