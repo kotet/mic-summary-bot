@@ -46,7 +46,7 @@ func (client *GenAIClient) IsWorthSummarizing(htmlAndDocs *HTMLandDocuments, pro
 							"name": {
 								Type: genai.TypeString,
 							},
-							"thougts": {
+							"thoughts": {
 								Type: genai.TypeString,
 							},
 							"result": {
@@ -54,7 +54,7 @@ func (client *GenAIClient) IsWorthSummarizing(htmlAndDocs *HTMLandDocuments, pro
 								Enum: []string{"YES", "NO", "WAIT"},
 							},
 						},
-						PropertyOrdering: []string{"name", "thougts", "result"},
+						PropertyOrdering: []string{"name", "thoughts", "result"},
 					},
 				},
 				"final_result": {
