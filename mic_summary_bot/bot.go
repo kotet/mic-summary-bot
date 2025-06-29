@@ -75,6 +75,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 		return nil
 	}
 	item := items[0]
+	slog.Info("Processing item", "url", item.URL)
 
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
@@ -85,9 +86,11 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to screen item: %w", err)
 	}
+	slog.Info("Item screening result", "url", item.URL, "result", screeningResult.FinalResult)
 
 	switch screeningResult.FinalResult {
 	case WorthSummarizingYes:
+		slog.Info("Item is worth summarizing", "url", item.URL)
 		summary, err := b.summarizer.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummerizingPrompt)
 		if err != nil {
 			return fmt.Errorf("failed to summarize content: %w", err)
@@ -101,12 +104,14 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 			return fmt.Errorf("failed to mark as posted: %w", err)
 		}
 	case WorthSummarizingNo:
+		slog.Info("Item is not worth summarizing", "url", item.URL)
 		item.Status = StatusProcessed
 		item.Reason = ReasonGeminiNotValuable
 		if err := b.itemRepository.Update(item); err != nil {
 			return fmt.Errorf("failed to mark as not valuable: %w", err)
 		}
 	case WorthSummarizingWait:
+		slog.Info("Item needs to wait for summarizing", "url", item.URL)
 		item.Status = StatusDeferred
 		item.Reason = ReasonGeminiPageNotReady
 		if err := b.itemRepository.Update(item); err != nil {

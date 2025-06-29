@@ -9,7 +9,7 @@ import (
 	"github.com/mattn/go-mastodon"
 )
 
-// MastodonClient はMastodonへの投稿を行うクライアントです。
+// MastodonClient is a client for posting to Mastodon.
 type MastodonClient struct {
 	client       *mastodon.Client
 	postTemplate string
@@ -21,7 +21,7 @@ type PostInfo struct {
 	URL     string
 }
 
-// NewMastodonClient は新しいMastodonClientを初期化して返します。
+// NewMastodonClient initializes and returns a new MastodonClient.
 func NewMastodonClient(config *Config) *MastodonClient {
 	client := mastodon.NewClient(&mastodon.Config{
 		Server:       config.Mastodon.InstanceURL,
@@ -35,7 +35,7 @@ func NewMastodonClient(config *Config) *MastodonClient {
 	}
 }
 
-// PostSummary は要約結果をMastodonに投稿します。
+// PostSummary posts the summary result to Mastodon.
 func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
 	t := template.Must(template.New("post").Parse(c.postTemplate))
 	var buf strings.Builder
@@ -45,18 +45,18 @@ func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
 		URL:     task.URL,
 	})
 	if err != nil {
-		log.Printf("ERROR: テンプレート展開失敗: %v", err)
+		log.Printf("ERROR: Failed to execute template: %v", err)
 		return err
 	}
 	status := buf.String()
 
-	// Mastodonの文字数制限はデフォルト5000文字のため、ここではチェックしない。
-	// 投稿エラー時は当該投稿をスキップする。
+	// The character limit for Mastodon is 5000 characters by default, so we don't check it here.
+	// On posting error, the current post is skipped.
 	s, err := c.client.PostStatus(context.Background(), &mastodon.Toot{Status: status})
 	if err != nil {
-		log.Printf("ERROR: Mastodon投稿失敗: %v", err)
+		log.Printf("ERROR: Failed to post to Mastodon: %v", err)
 		return err
 	}
-	log.Printf("INFO: Mastodon投稿成功: %s", s.URL)
+	log.Printf("INFO: Successfully posted to Mastodon: %s", s.URL)
 	return nil
 }
