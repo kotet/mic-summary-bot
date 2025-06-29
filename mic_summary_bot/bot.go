@@ -119,6 +119,6 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 		}
 	}
 
-	slog.Info("Finish posting summary")
+	pkgLogger.Info("Finish posting summary")
 	return nil
 }

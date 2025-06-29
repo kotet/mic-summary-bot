@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -172,7 +171,7 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 	// LLMの応答をテキストとして取得
 	responseText := resp.Text()
 
-	slog.Debug("Gemini API response", "response", responseText)
+	pkgLogger.Debug("Gemini API response", "response", responseText)
 
 	var jsonResult SummerizeResult
 	err = json.Unmarshal([]byte(responseText), &jsonResult)

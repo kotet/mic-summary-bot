@@ -16,7 +16,7 @@ func main() {
 		Level: slog.LevelDebug,
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, handlerOptions))
-	slog.SetDefault(logger)
+	micsummarybot.SetLogger(logger)
 
 	ctx := context.Background()
 

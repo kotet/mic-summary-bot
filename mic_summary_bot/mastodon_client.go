@@ -2,7 +2,6 @@ package micsummarybot
 
 import (
 	"context"
-	"log"
 	"strings"
 	"text/template"
 
@@ -45,7 +44,7 @@ func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
 		URL:     task.URL,
 	})
 	if err != nil {
-		log.Printf("ERROR: Failed to execute template: %v", err)
+		pkgLogger.Error("Failed to execute template", "error", err)
 		return err
 	}
 	status := buf.String()
@@ -54,9 +53,9 @@ func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
 	// On posting error, the current post is skipped.
 	s, err := c.client.PostStatus(context.Background(), &mastodon.Toot{Status: status})
 	if err != nil {
-		log.Printf("ERROR: Failed to post to Mastodon: %v", err)
+		pkgLogger.Error("Failed to post to Mastodon", "error", err)
 		return err
 	}
-	log.Printf("INFO: Successfully posted to Mastodon: %s", s.URL)
+	pkgLogger.Info("Successfully posted to Mastodon", "url", s.URL)
 	return nil
 }
