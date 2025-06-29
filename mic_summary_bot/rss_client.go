@@ -1,6 +1,7 @@
 package micsummarybot
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mmcdole/gofeed"
@@ -19,7 +20,7 @@ func NewRSSClient() *RSSClient {
 }
 
 // FetchFeed は指定されたURLからRSSフィードを取得し、パースします。
-func (c *RSSClient) FetchFeed(url string) ([]*gofeed.Item, error) {
+func (c *RSSClient) FetchFeed(ctx context.Context, url string) ([]*gofeed.Item, error) {
 	feed, err := c.feedParser.ParseURL(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse RSS feed from %s: %w", url, err)

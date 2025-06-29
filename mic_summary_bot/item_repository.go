@@ -125,12 +125,12 @@ func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error
 }
 
 // insert
-func (r *ItemRepository) insert(item *Item) error {
+func (r *ItemRepository) insert(ctx context.Context, item *Item) error {
 	insertSQL := `
 	INSERT INTO items (url, title, published_at, status, reason, retry_count, created_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?);
 	`
-	err := withTransaction(context.Background(), r.db, func(tx *sql.Tx) error {
+	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		_, err := tx.Exec(insertSQL, item.URL, item.Title, item.PublishedAt, item.Status, item.Reason, item.RetryCount, item.CreatedAt)
 		return err
 	})
@@ -141,13 +141,13 @@ func (r *ItemRepository) insert(item *Item) error {
 }
 
 // Update
-func (r *ItemRepository) Update(item *Item) error {
+func (r *ItemRepository) Update(ctx context.Context, item *Item) error {
 	updateSQL := `
 	UPDATE items
 	SET status = ?, reason = ?, retry_count = ?
 	WHERE id = ?;
 	`
-	err := withTransaction(context.Background(), r.db, func(tx *sql.Tx) error {
+	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
 		_, err := tx.Exec(updateSQL, item.Status, item.Reason, item.RetryCount, item.ID)
 		return err
 	})
@@ -158,14 +158,14 @@ func (r *ItemRepository) Update(item *Item) error {
 }
 
 // GetItemByURL
-func (r *ItemRepository) GetItemByURL(url string) (*Item, error) {
+func (r *ItemRepository) GetItemByURL(ctx context.Context, url string) (*Item, error) {
 	query := formatQuery(`
 	SELECT id, url, title, published_at, status, reason, retry_count, created_at
 	FROM items
 	WHERE url = ?;
 	`)
 
-	row := r.db.QueryRow(query, url)
+	row := r.db.QueryRowContext(ctx, query, url)
 	var item Item
 	err := row.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt)
 	if err == sql.ErrNoRows {
@@ -178,7 +178,7 @@ func (r *ItemRepository) GetItemByURL(url string) (*Item, error) {
 }
 
 // GetUnprocessedItems
-func (r *ItemRepository) GetUnprocessedItems() ([]*Item, error) {
+func (r *ItemRepository) GetUnprocessedItems(ctx context.Context) ([]*Item, error) {
 	query := formatQuery(`
 	SELECT id, url, title, published_at, status, reason, retry_count, created_at
 	FROM items
@@ -186,7 +186,7 @@ func (r *ItemRepository) GetUnprocessedItems() ([]*Item, error) {
 	ORDER BY published_at ASC
 	LIMIT 1;
 	`)
-	rows, err := r.db.Query(query, StatusUnprocessed)
+	rows, err := r.db.QueryContext(ctx, query, StatusUnprocessed)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get unprocessed items: %w", err)
 	}
@@ -212,7 +212,7 @@ func (r *ItemRepository) GetUnprocessedItems() ([]*Item, error) {
 	ORDER BY published_at ASC
 	LIMIT 1;
 	`)
-	rows, err = r.db.Query(query, StatusDeferred, 3) // Assuming max 3 retries for deferred
+	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, 3) // Assuming max 3 retries for deferred
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get deferred items: %w", err)
 	}
@@ -234,10 +234,10 @@ func (r *ItemRepository) GetUnprocessedItems() ([]*Item, error) {
 }
 
 // IsURLExists
-func (r *ItemRepository) IsURLExists(url string) (bool, error) {
+func (r *ItemRepository) IsURLExists(ctx context.Context, url string) (bool, error) {
 	query := `SELECT COUNT(*) FROM items WHERE url = ?;`
 	var count int
-	err := r.db.QueryRow(query, url).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, url).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -246,7 +246,7 @@ func (r *ItemRepository) IsURLExists(url string) (bool, error) {
 
 // AddItems は新しいRSSアイテムをデータベースに追加します。
 // URLが既存のレコードと重複する場合、新規追加は行いません。
-func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
+func (r *ItemRepository) AddItems(ctx context.Context, items []*gofeed.Item) (int, error) {
 	addedCount := 0
 	// 最も新しいエントリを取得
 	lastPublishedAt, err := func() (*time.Time, error) {
@@ -267,7 +267,7 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
 	}
 
 	for _, item := range items {
-		exists, err := r.IsURLExists(item.Link)
+		exists, err := r.IsURLExists(ctx, item.Link)
 		if err != nil {
 			return 0, fmt.Errorf("failed to check URL existence: %w", err)
 		}
@@ -278,7 +278,7 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
 
 		// 存在しない場合、前回の最新より古いものは処理済みとする
 		if lastPublishedAt != nil && item.PublishedParsed.Before(*lastPublishedAt) {
-			err = r.insert(&Item{
+			err = r.insert(ctx, &Item{
 				URL:         item.Link,
 				Title:       item.Title,
 				PublishedAt: *item.PublishedParsed,
@@ -291,7 +291,7 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
 				return 0, err
 			}
 		} else {
-			err = r.insert(&Item{
+			err = r.insert(ctx, &Item{
 				URL:         item.Link,
 				Title:       item.Title,
 				PublishedAt: *item.PublishedParsed,
@@ -309,10 +309,10 @@ func (r *ItemRepository) AddItems(items []*gofeed.Item) (int, error) {
 	return addedCount, nil
 }
 
-func (r *ItemRepository) CountUnprocessedItems() (int, error) {
+func (r *ItemRepository) CountUnprocessedItems(ctx context.Context) (int, error) {
 	query := `SELECT COUNT(*) FROM items WHERE status = ?;`
 	var count int
-	err := r.db.QueryRow(query, StatusUnprocessed).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, StatusUnprocessed).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
