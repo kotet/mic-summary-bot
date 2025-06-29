@@ -24,10 +24,15 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 		return nil, fmt.Errorf("failed to create GenAI client: %w", err)
 	}
 
+	mastodonClient, err := NewMastodonClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Mastodon client: %w", err)
+	}
+
 	return &MICSummaryBot{
 		rssClient:      NewRSSClient(),
 		genAIClient:    genAIClient,
-		mastodonClient: NewMastodonClient(config),
+		mastodonClient: mastodonClient,
 		itemRepository: itemRepository,
 		config:         config,
 	}, nil

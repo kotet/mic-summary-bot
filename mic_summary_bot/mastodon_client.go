@@ -2,6 +2,7 @@ package micsummarybot
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"text/template"
 
@@ -10,8 +11,8 @@ import (
 
 // MastodonClient is a client for posting to Mastodon.
 type MastodonClient struct {
-	client       *mastodon.Client
-	postTemplate string
+	client   *mastodon.Client
+	template *template.Template
 }
 
 type PostInfo struct {
@@ -21,24 +22,29 @@ type PostInfo struct {
 }
 
 // NewMastodonClient initializes and returns a new MastodonClient.
-func NewMastodonClient(config *Config) *MastodonClient {
+func NewMastodonClient(config *Config) (*MastodonClient, error) {
 	client := mastodon.NewClient(&mastodon.Config{
 		Server:       config.Mastodon.InstanceURL,
 		ClientID:     config.Mastodon.ClientID,
 		ClientSecret: config.Mastodon.ClientSecret,
 		AccessToken:  config.Mastodon.AccessToken,
 	})
-	return &MastodonClient{
-		client:       client,
-		postTemplate: config.Mastodon.PostTemplate,
+
+	t, err := template.New("post").Parse(config.Mastodon.PostTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse post template: %w", err)
 	}
+
+	return &MastodonClient{
+		client:   client,
+		template: t,
+	}, nil
 }
 
 // PostSummary posts the summary result to Mastodon.
 func (c *MastodonClient) PostSummary(task Item, summary SummerizeResult) error {
-	t := template.Must(template.New("post").Parse(c.postTemplate))
 	var buf strings.Builder
-	err := t.Execute(&buf, PostInfo{
+	err := c.template.Execute(&buf, PostInfo{
 		Title:   task.Title,
 		Summary: summary.FinalSummary,
 		URL:     task.URL,
