@@ -146,6 +146,10 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 	}
 
 	parts = append(parts, genai.NewPartFromText(prompt))
+	for i, part := range parts {
+		pkgLogger.Debug("parts created", "index", i, "part", part)
+	}
+
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
 
 	// LLMへのリクエストとリトライ処理

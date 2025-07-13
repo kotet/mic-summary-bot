@@ -397,7 +397,7 @@ func TestItemRepository_GetItemByURL(t *testing.T) {
 	})
 }
 
-func TestItemRepository_GetUnprocessedItems(t *testing.T) {
+func TestItemRepository_GetItemForSummarization(t *testing.T) {
 	baseTime := time.Now().Truncate(time.Second).UTC()
 
 	createTestItem := func(url string, status ItemStatus, publishedAt time.Time, lastCheckedAt time.Time, retryCount int, titleSuffix string) *Item {
@@ -408,116 +408,111 @@ func TestItemRepository_GetUnprocessedItems(t *testing.T) {
 			Status:        status,
 			Reason:        ReasonNone,
 			RetryCount:    retryCount,
-			CreatedAt:     baseTime, // Consistent CreatedAt for simplicity
+			CreatedAt:     baseTime,
 			LastCheckedAt: lastCheckedAt,
 		}
 	}
 
-	t.Run("no items in database", func(t *testing.T) {
+	t.Run("no pending items", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.Nil(t, items)
+		assert.Nil(t, item)
 	})
 
-	t.Run("one unprocessed item exists", func(t *testing.T) {
+	t.Run("one pending item exists", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		item1 := createTestItem("http://example.com/unprocessed1", StatusUnprocessed, baseTime.Add(-1*time.Hour), baseTime, 0, "U1")
-		err := repo.insert(context.Background(), item1)
+		pendingItem := createTestItem("http://example.com/pending", StatusPending, baseTime, baseTime, 0, "P")
+		err := repo.insert(context.Background(), pendingItem)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, item1.URL, items[0].URL)
-		assert.Equal(t, StatusUnprocessed, items[0].Status)
-		assert.True(t, item1.PublishedAt.Equal(items[0].PublishedAt), "PublishedAt mismatch")
+		require.NotNil(t, item)
+		assert.Equal(t, pendingItem.URL, item.URL)
 	})
 
-	t.Run("multiple unprocessed items exist, returns oldest published", func(t *testing.T) {
+	t.Run("multiple pending items exist, returns oldest published", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		itemNewer := createTestItem("http://example.com/unprocessedNew", StatusUnprocessed, baseTime.Add(-1*time.Hour), baseTime, 0, "UNew")
-		itemOlder := createTestItem("http://example.com/unprocessedOld", StatusUnprocessed, baseTime.Add(-2*time.Hour), baseTime, 0, "UOld")
+		itemNewer := createTestItem("http://example.com/pendingNew", StatusPending, baseTime.Add(-1*time.Hour), baseTime, 0, "PNew")
+		itemOlder := createTestItem("http://example.com/pendingOld", StatusPending, baseTime.Add(-2*time.Hour), baseTime, 0, "POld")
 		err := repo.insert(context.Background(), itemNewer)
 		require.NoError(t, err)
 		err = repo.insert(context.Background(), itemOlder)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, itemOlder.URL, items[0].URL, "Should return the oldest unprocessed item by PublishedAt")
-		assert.True(t, itemOlder.PublishedAt.Equal(items[0].PublishedAt))
+		require.NotNil(t, item)
+		assert.Equal(t, itemOlder.URL, item.URL)
 	})
+}
 
-	t.Run("only deferred items exist, returns oldest last_checked_at", func(t *testing.T) {
+func TestItemRepository_GetItemForScreening(t *testing.T) {
+	baseTime := time.Now().Truncate(time.Second).UTC()
+
+	createTestItem := func(url string, status ItemStatus, publishedAt time.Time, lastCheckedAt time.Time, retryCount int, titleSuffix string) *Item {
+		return &Item{
+			URL:           url,
+			Title:         "Test Item " + titleSuffix,
+			PublishedAt:   publishedAt,
+			Status:        status,
+			Reason:        ReasonNone,
+			RetryCount:    retryCount,
+			CreatedAt:     baseTime,
+			LastCheckedAt: lastCheckedAt,
+		}
+	}
+
+	t.Run("no items to screen", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		deferredItemNewer := createTestItem("http://example.com/deferredNew", StatusDeferred, baseTime.Add(-1*time.Hour), baseTime.Add(-1*time.Hour), 0, "DNew")
-		deferredItemOlder := createTestItem("http://example.com/deferredOld", StatusDeferred, baseTime.Add(-2*time.Hour), baseTime.Add(-2*time.Hour), 0, "DOld")
-		err := repo.insert(context.Background(), deferredItemNewer)
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-		err = repo.insert(context.Background(), deferredItemOlder)
-		require.NoError(t, err)
-
-		items, err := repo.GetUnprocessedItems(context.Background())
-		require.NoError(t, err)
-		require.Equal(t, 1, len(items))
-		assert.Equal(t, deferredItemOlder.URL, items[0].URL, "Should return the oldest deferred item by LastCheckedAt")
+		assert.Nil(t, item)
 	})
 
-	t.Run("only processed items exist", func(t *testing.T) {
+	t.Run("returns unprocessed item first", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		processedItem := createTestItem("http://example.com/processed1", StatusProcessed, baseTime.Add(-1*time.Hour), baseTime, 0, "P1")
-		err := repo.insert(context.Background(), processedItem)
+		unprocessed := createTestItem("http://example.com/unprocessed", StatusUnprocessed, baseTime.Add(-2*time.Hour), baseTime, 0, "U")
+		deferred := createTestItem("http://example.com/deferred", StatusDeferred, baseTime.Add(-3*time.Hour), baseTime.Add(-3*time.Hour), 0, "D")
+		err := repo.insert(context.Background(), unprocessed)
+		require.NoError(t, err)
+		err = repo.insert(context.Background(), deferred)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-		require.Nil(t, items)
+		require.NotNil(t, item)
+		assert.Equal(t, unprocessed.URL, item.URL)
 	})
 
-	t.Run("unprocessed and deferred items exist, returns unprocessed", func(t *testing.T) {
+	t.Run("returns oldest deferred if no unprocessed", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		unprocessedItem := createTestItem("http://example.com/unprocessed", StatusUnprocessed, baseTime.Add(-2*time.Hour), baseTime, 0, "U")
-		deferredItem := createTestItem("http://example.com/deferred", StatusDeferred, baseTime.Add(-1*time.Hour), baseTime.Add(-3*time.Hour), 0, "D") // Oldest LastCheckedAt
-		err := repo.insert(context.Background(), unprocessedItem)
+		deferredNewer := createTestItem("http://example.com/deferredNew", StatusDeferred, baseTime, baseTime.Add(-1*time.Hour), 0, "DNew")
+		deferredOlder := createTestItem("http://example.com/deferredOld", StatusDeferred, baseTime, baseTime.Add(-2*time.Hour), 0, "DOld")
+		pending := createTestItem("http://example.com/pending", StatusPending, baseTime, baseTime, 0, "P")
+		err := repo.insert(context.Background(), deferredNewer)
 		require.NoError(t, err)
-		err = repo.insert(context.Background(), deferredItem)
+		err = repo.insert(context.Background(), deferredOlder)
+		require.NoError(t, err)
+		err = repo.insert(context.Background(), pending)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, unprocessedItem.URL, items[0].URL, "Should prioritize unprocessed item")
-		assert.True(t, unprocessedItem.PublishedAt.Equal(items[0].PublishedAt))
-	})
-
-	t.Run("database error on first query", func(t *testing.T) {
-		repo, cleanup := setupTestDB(t)
-		// Do not defer cleanup immediately, we need to close DB first
-
-		repo.Close() // Close DB to simulate an error
-
-		items, err := repo.GetUnprocessedItems(context.Background())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get unprocessed items", "Error message should indicate unprocessed item query failure")
-		assert.Contains(t, err.Error(), "database is closed")
-		assert.Nil(t, items)
-		cleanup() // Call cleanup now
+		require.NotNil(t, item)
+		assert.Equal(t, deferredOlder.URL, item.URL)
 	})
 }

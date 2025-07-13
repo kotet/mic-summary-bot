@@ -49,7 +49,7 @@ type StorageConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path                string `yaml:"path"`
+	Path                  string `yaml:"path"`
 	MaxDeferredRetryCount int    `yaml:"max_deferred_retry_count"`
 }
 
