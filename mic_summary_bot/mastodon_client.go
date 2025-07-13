@@ -64,7 +64,7 @@ func (c *MastodonClient) PostSummary(ctx context.Context, task Item, summary Sum
 
 	// The character limit for Mastodon is 5000 characters by default, so we don't check it here.
 	// On posting error, the current post is skipped.
-	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status})
+	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status, Visibility: mastodon.VisibilityUnlisted})
 	if err != nil {
 		pkgLogger.Error("Failed to post to Mastodon", "error", err)
 		return err
@@ -86,7 +86,7 @@ func (c *MastodonClient) PostNoValue(ctx context.Context, item Item) error {
 	}
 	status := buf.String()
 
-	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status})
+	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status, Visibility: mastodon.VisibilityUnlisted})
 	if err != nil {
 		pkgLogger.Error("Failed to post no value message to Mastodon", "error", err)
 		return err
