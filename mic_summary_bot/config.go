@@ -61,7 +61,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	config := DefaultConfig()
-	err = yaml.Unmarshal(configYAML, config)
+	err = yaml.UnmarshalStrict(configYAML, config)
 	if err != nil {
 		return nil, err
 	}

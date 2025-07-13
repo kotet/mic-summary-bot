@@ -106,6 +106,9 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 		return SummarizeResult{}, fmt.Errorf("failed to execute prompt template: %w", err)
 	}
 	prompt := promptBuilder.String()
+	if prompt == "" {
+		return SummarizeResult{}, fmt.Errorf("prompt is empty")
+	}
 
 	parts := []*genai.Part{}
 	parts = append(parts, &genai.Part{
