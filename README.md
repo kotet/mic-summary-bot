@@ -37,7 +37,7 @@ go mod tidy
 ```
 
 ### 3. 設定ファイルの準備
-`mic_summary_bot/config.example.yaml` を `mic_summary_bot/config.yaml` としてコピーし、環境に合わせて編集してください。
+`mic_summary_bot/config.example.yaml` を `config.yaml` としてコピーし、環境に合わせて編集してください。
 
 ### 4. APIキーの設定
 `config.yaml` にGemini APIキーとMastodonアクセストークンを設定してください。
