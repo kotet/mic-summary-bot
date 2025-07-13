@@ -9,6 +9,10 @@ mastodon:
     {{ .Title }}
     {{ .Summary }}
     {{ .URL }}
+  no_value_post_template: |
+    {{ .Title }}
+    【要約対象外】
+    {{ .URL }}
 storage:
   download_dir: "./data/downloads"
   keep_local_copy: true
