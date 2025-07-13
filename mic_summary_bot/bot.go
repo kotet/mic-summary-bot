@@ -38,7 +38,7 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 	}, nil
 }
 
-func (b *MICSummaryBot) UpdateItems(ctx context.Context) error {
+func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 	pkgLogger.Info("Start updating items")
 	items, err := b.rssClient.FetchFeed(ctx, b.config.RSS.URL)
 	if err != nil {

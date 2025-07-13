@@ -36,7 +36,7 @@ func main() {
 		command := os.Args[1]
 		switch command {
 		case "update":
-			if err := bot.UpdateItems(ctx); err != nil {
+			if err := bot.RefreshFeedItems(ctx); err != nil {
 				slog.Error("Failed to fetch and store items", "error", err)
 			}
 		case "screen":
@@ -51,7 +51,7 @@ func main() {
 			slog.Error("Unknown command", "command", command)
 		}
 	} else {
-		if err := bot.UpdateItems(ctx); err != nil {
+		if err := bot.RefreshFeedItems(ctx); err != nil {
 			slog.Error("Failed to fetch and store items", "error", err)
 		}
 
