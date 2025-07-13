@@ -40,7 +40,8 @@ type MastodonConfig struct {
 	AccessToken  string `yaml:"access_token"`
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
-	PostTemplate string `yaml:"post_template"`
+	PostTemplate      string `yaml:"post_template"`
+	NoValuePostTemplate string `yaml:"no_value_post_template"`
 }
 
 type StorageConfig struct {

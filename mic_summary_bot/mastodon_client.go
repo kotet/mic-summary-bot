@@ -11,8 +11,9 @@ import (
 
 // MastodonClient is a client for posting to Mastodon.
 type MastodonClient struct {
-	client   *mastodon.Client
-	template *template.Template
+	client          *mastodon.Client
+	template        *template.Template
+	noValueTemplate *template.Template
 }
 
 type PostInfo struct {
@@ -35,9 +36,15 @@ func NewMastodonClient(config *Config) (*MastodonClient, error) {
 		return nil, fmt.Errorf("failed to parse post template: %w", err)
 	}
 
+	noValueT, err := template.New("no_value_post").Parse(config.Mastodon.NoValuePostTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse no value post template: %w", err)
+	}
+
 	return &MastodonClient{
-		client:   client,
-		template: t,
+		client:          client,
+		template:        t,
+		noValueTemplate: noValueT,
 	}, nil
 }
 
@@ -63,5 +70,27 @@ func (c *MastodonClient) PostSummary(ctx context.Context, task Item, summary Sum
 		return err
 	}
 	pkgLogger.Info("Successfully posted to Mastodon", "url", s.URL)
+	return nil
+}
+
+// PostNoValue posts a predefined message for items deemed not valuable.
+func (c *MastodonClient) PostNoValue(ctx context.Context, item Item) error {
+	var buf strings.Builder
+	err := c.noValueTemplate.Execute(&buf, PostInfo{
+		Title: item.Title,
+		URL:   item.URL,
+	})
+	if err != nil {
+		pkgLogger.Error("Failed to execute no value template", "error", err)
+		return err
+	}
+	status := buf.String()
+
+	s, err := c.client.PostStatus(ctx, &mastodon.Toot{Status: status})
+	if err != nil {
+		pkgLogger.Error("Failed to post no value message to Mastodon", "error", err)
+		return err
+	}
+	pkgLogger.Info("Successfully posted no value message to Mastodon", "url", s.URL)
 	return nil
 }
