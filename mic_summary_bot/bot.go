@@ -132,11 +132,11 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) error {
 	case WorthSummarizingNo:
 		item.Status = StatusProcessed
 		item.Reason = ReasonGeminiNotValuable
-		if err := b.mastodonClient.PostNoValue(ctx, *item); err != nil {
-			return fmt.Errorf("failed to post no value message to mastodon: %w", err)
-		}
 		if err := b.itemRepository.Update(ctx, item); err != nil {
 			return fmt.Errorf("failed to mark as not valuable: %w", err)
+		}
+		if err := b.mastodonClient.PostNoValue(ctx, *item); err != nil {
+			return fmt.Errorf("failed to post no value message to mastodon: %w", err)
 		}
 	case WorthSummarizingWait:
 		item.Status = StatusDeferred
