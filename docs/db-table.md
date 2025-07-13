@@ -27,24 +27,27 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
 | `status`       | INTEGER   | NOT NULL                   | アイテムの処理状態。`0`: unprocessed（未処理）、`1`: deferred（先送り）、`2`: processed（処理済み）のいずれか。データ効率向上のため整数値を使用 |
 | `reason`       | INTEGER   | NULLABLE                   | `status`が`1` (`deferred`) または`2` (`processed`) になった場合の理由コード。アプリケーション側で定義された整数値                               |
 | `retry_count`  | INTEGER   | NOT NULL                   | 処理を試行したがエラーまたはスキップにより失敗した回数。一定回数（例: 3回）以上の失敗が続いた場合、`status`を`processed`に変更する              |
-| `created_at`   | TIMESTAMP | NOT NULL                   | レコードが作成された日時。                                                                                                                      |
+| `created_at`      | TIMESTAMP | NOT NULL                   | レコードが作成された日時。                                                                                                                      |
+| `last_checked_at` | TIMESTAMP | NOT NULL                   | アイテムが最後に処理対象としてチェックされた日時。                                                                                              |\
 
 * **インデックス**
 
     * `idx_items_url`: `url`カラムに対するユニークインデックス。重複排除の高速化のため。
-    * `idx_items_status_published_at`: `status`と`published_at`カラムに対するインデックス。未処理アイテムの効率的な取得と、先送りアイテムの処理優先度制御のため。
+    * `idx_items_status_last_checked_at`: `status`と`last_checked_at`カラムに対するインデックス。未処理アイテムおよび先送りアイテムの効率的な取得のため。
 
 ## 3. 状態遷移とデータ操作
 
 1.  **新規アイテムの追加**:
     * RSSフィードから新しいアイテムが取得された場合、`status`を`0` (`unprocessed`)、`retry_count`を`0`として`items`テーブルに追加する。
+    * `last_checked_at`はレコード作成日時と同じ値を設定する。
     * `url`が既存のレコードと重複する場合、新規追加は行わない。
 
 2.  **アイテムの選択**:
-    * Botはまず`status`が`0` (`unprocessed`) のアイテムの中から1件を選択し、処理を試みる。
-    * `unprocessed`のアイテムがない場合、`status`が`1` (`deferred`) のアイテムの中から1件を選択し、処理を試みる。
+    * Botはまず`status`が`0` (`unprocessed`) のアイテムの中から`published_at`が最も古いものを1件選択し、処理を試みる。
+    * `unprocessed`のアイテムがない場合、`status`が`1` (`deferred`) のアイテムの中から`last_checked_at`が最も古いものを1件選択し、処理を試みる。
 
 3.  **処理結果に応じた状態更新**:
+    * `status`を更新するすべてのケースで、`last_checked_at`を現在の時刻に更新する。
     * **要約・投稿成功**:
         * `status`を`2` (`processed`) に更新する。
         * `reason`を`0` (`ReasonNone`) に更新する。
