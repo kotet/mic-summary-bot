@@ -45,7 +45,7 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
 
 2.  **アイテムの選択**:
     * **要約処理**: `status`が`2` (`pending`) のアイテムの中から`published_at`が最も古いものを1件選択し、処理を試みる。
-    * **スクリーニング処理**: `pending`のアイテムがない場合、`status`が`0` (`unprocessed`) または `1` (`deferred`) のアイテムの中から`last_checked_at`が最も古いものを1件選択し、処理を試みる。
+    * **スクリーニング処理**: `pending`のアイテムがない場合、`status`が`0` (`unprocessed`) の中から`published_at`が最も古いものまたは `1` (`deferred`) のアイテムの中から`last_checked_at`が最も古いものを1件選択し、処理を試みる。
 
 3.  **処理結果に応じた状態更新**:
     * `status`を更新するすべてのケースで、`last_checked_at`を現在の時刻に更新する。
