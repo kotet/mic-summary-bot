@@ -38,7 +38,7 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 	}, nil
 }
 
-func (b *MICSummaryBot) UpdateItems(ctx context.Context) error {
+func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 	pkgLogger.Info("Start updating items")
 	items, err := b.rssClient.FetchFeed(ctx, b.config.RSS.URL)
 	if err != nil {
@@ -63,16 +63,54 @@ func (b *MICSummaryBot) UpdateItems(ctx context.Context) error {
 
 func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 	pkgLogger.Info("Start posting summary")
-	items, err := b.itemRepository.GetUnprocessedItems(ctx)
+
+	item, err := b.itemRepository.GetItemForSummarization(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get not posted item: %w", err)
+		return fmt.Errorf("failed to get pending item: %w", err)
 	}
-	if len(items) == 0 {
-		pkgLogger.Info("No item to post")
+
+	if item == nil {
+		pkgLogger.Info("No pending items to summarize")
 		return nil
 	}
-	item := items[0]
-	pkgLogger.Info("Processing item", "url", item.URL)
+
+	pkgLogger.Info("Processing pending item for summarization", "url", item.URL)
+
+	htmlAndDocs, err := GetHTMLSummary(item.URL)
+	if err != nil {
+		return fmt.Errorf("failed to parse html: %w", err)
+	}
+
+	summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
+	if err != nil {
+		return fmt.Errorf("failed to summarize content: %w", err)
+	}
+
+	if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
+		return fmt.Errorf("failed to post to mastodon: %w", err)
+	}
+
+	item.Status = StatusProcessed
+	if err := b.itemRepository.Update(ctx, item); err != nil {
+		return fmt.Errorf("failed to mark as posted: %w", err)
+	}
+
+	pkgLogger.Info("Finish posting summary")
+	return nil
+}
+
+func (b *MICSummaryBot) ScreenItem(ctx context.Context) error {
+	item, err := b.itemRepository.GetItemForScreening(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get item for screening: %w", err)
+	}
+
+	if item == nil {
+		pkgLogger.Info("No items to screen")
+		return nil
+	}
+
+	pkgLogger.Info("Screening item", "url", item.URL)
 
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
@@ -87,17 +125,9 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 
 	switch screeningResult.FinalResult {
 	case WorthSummarizingYes:
-		summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
-		if err != nil {
-			return fmt.Errorf("failed to summarize content: %w", err)
-		}
-
-		if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
-			return fmt.Errorf("failed to post to mastodon: %w", err)
-		}
-		item.Status = StatusProcessed
+		item.Status = StatusPending
 		if err := b.itemRepository.Update(ctx, item); err != nil {
-			return fmt.Errorf("failed to mark as posted: %w", err)
+			return fmt.Errorf("failed to mark as pending: %w", err)
 		}
 	case WorthSummarizingNo:
 		item.Status = StatusProcessed
@@ -113,6 +143,5 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 		}
 	}
 
-	pkgLogger.Info("Finish posting summary")
 	return nil
 }

@@ -53,6 +53,10 @@ func TestNewItemRepository(t *testing.T) {
 		err = repo.db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_items_status_published_at';").Scan(&indexName)
 		require.NoError(t, err, "Querying for 'idx_items_status_published_at' index should succeed")
 		assert.Equal(t, "idx_items_status_published_at", indexName, "Index 'idx_items_status_published_at' should exist")
+
+		err = repo.db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_items_status_last_checked_at';").Scan(&indexName)
+		require.NoError(t, err, "Querying for 'idx_items_status_last_checked_at' index should succeed")
+		assert.Equal(t, "idx_items_status_last_checked_at", indexName, "Index 'idx_items_status_last_checked_at' should exist")
 	})
 
 	t.Run("file-based database", func(t *testing.T) {
@@ -92,13 +96,14 @@ func TestItemRepository_insert(t *testing.T) {
 
 	now := time.Now().Truncate(time.Second).UTC() // Use UTC and truncate for consistency
 	item := &Item{
-		URL:         "http://example.com/article1",
-		Title:       "Article 1",
-		PublishedAt: now,
-		Status:      StatusUnprocessed,
-		Reason:      ReasonNone,
-		RetryCount:  0,
-		CreatedAt:   now,
+		URL:           "http://example.com/article1",
+		Title:         "Article 1",
+		PublishedAt:   now,
+		Status:        StatusUnprocessed,
+		Reason:        ReasonNone,
+		RetryCount:    0,
+		CreatedAt:     now,
+		LastCheckedAt: now,
 	}
 
 	err := repo.insert(context.Background(), item)
@@ -106,8 +111,8 @@ func TestItemRepository_insert(t *testing.T) {
 
 	// Verify by querying
 	var dbItem Item
-	row := repo.db.QueryRow("SELECT id, url, title, published_at, status, reason, retry_count, created_at FROM items WHERE url = ?", item.URL)
-	err = row.Scan(&dbItem.ID, &dbItem.URL, &dbItem.Title, &dbItem.PublishedAt, &dbItem.Status, &dbItem.Reason, &dbItem.RetryCount, &dbItem.CreatedAt)
+	row := repo.db.QueryRow("SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at FROM items WHERE url = ?", item.URL)
+	err = row.Scan(&dbItem.ID, &dbItem.URL, &dbItem.Title, &dbItem.PublishedAt, &dbItem.Status, &dbItem.Reason, &dbItem.RetryCount, &dbItem.CreatedAt, &dbItem.LastCheckedAt)
 	require.NoError(t, err, "Scanning inserted item should succeed")
 
 	assert.True(t, dbItem.ID > 0, "ID should be populated")
@@ -118,16 +123,18 @@ func TestItemRepository_insert(t *testing.T) {
 	assert.Equal(t, item.Reason, dbItem.Reason)
 	assert.Equal(t, item.RetryCount, dbItem.RetryCount)
 	assert.True(t, item.CreatedAt.Equal(dbItem.CreatedAt.UTC()), "CreatedAt mismatch. Expected: %v, Got: %v", item.CreatedAt, dbItem.CreatedAt.UTC())
+	assert.True(t, item.LastCheckedAt.Equal(dbItem.LastCheckedAt.UTC()), "LastCheckedAt mismatch. Expected: %v, Got: %v", item.LastCheckedAt, dbItem.LastCheckedAt.UTC())
 
 	// Test unique constraint on URL
 	duplicateItem := &Item{
-		URL:         "http://example.com/article1", // Same URL
-		Title:       "Duplicate Article",
-		PublishedAt: now,
-		Status:      StatusProcessed,
-		Reason:      ReasonNone,
-		RetryCount:  0,
-		CreatedAt:   now,
+		URL:           "http://example.com/article1", // Same URL
+		Title:         "Duplicate Article",
+		PublishedAt:   now,
+		Status:        StatusProcessed,
+		Reason:        ReasonNone,
+		RetryCount:    0,
+		CreatedAt:     now,
+		LastCheckedAt: now,
 	}
 	err = repo.insert(context.Background(), duplicateItem)
 	require.Error(t, err, "Insert should fail for duplicate URL due to UNIQUE constraint")
@@ -142,7 +149,7 @@ func TestItemRepository_IsURLExists(t *testing.T) {
 	url2 := "http://example.com/notexists"
 
 	// Insert an item to make url1 exist
-	item := &Item{URL: url1, Title: "Test", PublishedAt: time.Now(), Status: StatusUnprocessed, Reason: ReasonNone, RetryCount: 0, CreatedAt: time.Now()}
+	item := &Item{URL: url1, Title: "Test", PublishedAt: time.Now(), Status: StatusUnprocessed, Reason: ReasonNone, RetryCount: 0, CreatedAt: time.Now(), LastCheckedAt: time.Now()}
 	err := repo.insert(context.Background(), item)
 	require.NoError(t, err)
 
@@ -158,16 +165,17 @@ func TestItemRepository_IsURLExists(t *testing.T) {
 // getItemByUrl is a test helper function to retrieve an item for verification.
 func getItemByUrl(t *testing.T, db *sql.DB, url string) *Item {
 	t.Helper()
-	query := `SELECT id, url, title, published_at, status, reason, retry_count, created_at FROM items WHERE url = ?`
+	query := `SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at FROM items WHERE url = ?`
 	row := db.QueryRow(query, url)
 	var item Item
-	err := row.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt)
+	err := row.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt)
 	if err == sql.ErrNoRows {
 		return nil // Item not found
 	}
 	require.NoError(t, err, "Failed to scan item from DB")
 	item.PublishedAt = item.PublishedAt.UTC() // Ensure UTC for comparison
 	item.CreatedAt = item.CreatedAt.UTC()     // Ensure UTC for comparison
+	item.LastCheckedAt = item.LastCheckedAt.UTC()
 	return &item
 }
 
@@ -222,13 +230,14 @@ func TestItemRepository_AddItem(t *testing.T) {
 
 		// Pre-populate DB with an item that will be the "last published"
 		existingItem := &Item{
-			URL:         "http://example.com/existing",
-			Title:       "Existing Article",
-			PublishedAt: timeMid, // This will be our lastPublishedAt
-			Status:      StatusProcessed,
-			Reason:      ReasonNone,
-			RetryCount:  0,
-			CreatedAt:   time.Now().UTC(),
+			URL:           "http://example.com/existing",
+			Title:         "Existing Article",
+			PublishedAt:   timeMid, // This will be our lastPublishedAt
+			Status:        StatusProcessed,
+			Reason:        ReasonNone,
+			RetryCount:    0,
+			CreatedAt:     time.Now().UTC(),
+			LastCheckedAt: time.Now().UTC(),
 		}
 		err := repo.insert(context.Background(), existingItem)
 		require.NoError(t, err)
@@ -288,13 +297,14 @@ func TestItemRepository_Update(t *testing.T) {
 
 	now := time.Now().Truncate(time.Second).UTC()
 	initialItem := &Item{
-		URL:         "http://example.com/updatable",
-		Title:       "Updatable Item",
-		PublishedAt: now,
-		Status:      StatusUnprocessed,
-		Reason:      ReasonNone,
-		RetryCount:  0,
-		CreatedAt:   now,
+		URL:           "http://example.com/updatable",
+		Title:         "Updatable Item",
+		PublishedAt:   now,
+		Status:        StatusUnprocessed,
+		Reason:        ReasonNone,
+		RetryCount:    0,
+		CreatedAt:     now,
+		LastCheckedAt: now,
 	}
 
 	// Insert the initial item
@@ -310,6 +320,9 @@ func TestItemRepository_Update(t *testing.T) {
 	insertedItem.Status = StatusProcessed
 	insertedItem.Reason = ReasonGeminiNotValuable
 	insertedItem.RetryCount = 1
+
+	// Record time before update
+	beforeUpdate := time.Now().UTC()
 
 	err = repo.Update(context.Background(), insertedItem)
 	require.NoError(t, err, "Update should succeed")
@@ -327,6 +340,10 @@ func TestItemRepository_Update(t *testing.T) {
 	assert.Equal(t, initialItem.Title, updatedItem.Title)
 	assert.True(t, initialItem.PublishedAt.Equal(updatedItem.PublishedAt.UTC()))
 	assert.True(t, initialItem.CreatedAt.Equal(updatedItem.CreatedAt.UTC()))
+
+	// Check that LastCheckedAt was updated
+	assert.True(t, updatedItem.LastCheckedAt.After(beforeUpdate) || updatedItem.LastCheckedAt.Equal(beforeUpdate),
+		"LastCheckedAt should be updated. Got: %v, BeforeUpdate: %v", updatedItem.LastCheckedAt, beforeUpdate)
 
 	// Test updating a non-existent item (should not error, but affect 0 rows)
 	nonExistentItem := &Item{
@@ -346,13 +363,14 @@ func TestItemRepository_GetItemByURL(t *testing.T) {
 
 	now := time.Now().Truncate(time.Second).UTC()
 	itemToInsert := &Item{
-		URL:         "http://example.com/getbyurl",
-		Title:       "Get By URL Test",
-		PublishedAt: now,
-		Status:      StatusUnprocessed,
-		Reason:      ReasonNone,
-		RetryCount:  0,
-		CreatedAt:   now,
+		URL:           "http://example.com/getbyurl",
+		Title:         "Get By URL Test",
+		PublishedAt:   now,
+		Status:        StatusUnprocessed,
+		Reason:        ReasonNone,
+		RetryCount:    0,
+		CreatedAt:     now,
+		LastCheckedAt: now,
 	}
 	err := repo.insert(context.Background(), itemToInsert)
 	require.NoError(t, err)
@@ -368,6 +386,7 @@ func TestItemRepository_GetItemByURL(t *testing.T) {
 		assert.Equal(t, itemToInsert.Reason, retrievedItem.Reason)
 		assert.Equal(t, itemToInsert.RetryCount, retrievedItem.RetryCount)
 		assert.True(t, itemToInsert.CreatedAt.Equal(retrievedItem.CreatedAt.UTC()))
+		assert.True(t, itemToInsert.LastCheckedAt.Equal(retrievedItem.LastCheckedAt.UTC()))
 		assert.True(t, retrievedItem.ID > 0)
 	})
 
@@ -378,123 +397,122 @@ func TestItemRepository_GetItemByURL(t *testing.T) {
 	})
 }
 
-func TestItemRepository_GetUnprocessedItems(t *testing.T) {
+func TestItemRepository_GetItemForSummarization(t *testing.T) {
 	baseTime := time.Now().Truncate(time.Second).UTC()
 
-	createTestItem := func(url string, status ItemStatus, publishedAt time.Time, retryCount int, titleSuffix string) *Item {
+	createTestItem := func(url string, status ItemStatus, publishedAt time.Time, lastCheckedAt time.Time, retryCount int, titleSuffix string) *Item {
 		return &Item{
-			URL:         url,
-			Title:       "Test Item " + titleSuffix,
-			PublishedAt: publishedAt, // Already UTC from baseTime
-			Status:      status,
-			Reason:      ReasonNone,
-			RetryCount:  retryCount,
-			CreatedAt:   baseTime, // Consistent CreatedAt for simplicity
+			URL:           url,
+			Title:         "Test Item " + titleSuffix,
+			PublishedAt:   publishedAt,
+			Status:        status,
+			Reason:        ReasonNone,
+			RetryCount:    retryCount,
+			CreatedAt:     baseTime,
+			LastCheckedAt: lastCheckedAt,
 		}
 	}
 
-	t.Run("no items in database", func(t *testing.T) {
+	t.Run("no pending items", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.Nil(t, items)
+		assert.Nil(t, item)
 	})
 
-	t.Run("one unprocessed item exists", func(t *testing.T) {
+	t.Run("one pending item exists", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		item1 := createTestItem("http://example.com/unprocessed1", StatusUnprocessed, baseTime.Add(-1*time.Hour), 0, "U1")
-		err := repo.insert(context.Background(), item1)
+		pendingItem := createTestItem("http://example.com/pending", StatusPending, baseTime, baseTime, 0, "P")
+		err := repo.insert(context.Background(), pendingItem)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, item1.URL, items[0].URL)
-		assert.Equal(t, StatusUnprocessed, items[0].Status)
-		assert.True(t, item1.PublishedAt.Equal(items[0].PublishedAt), "PublishedAt mismatch")
+		require.NotNil(t, item)
+		assert.Equal(t, pendingItem.URL, item.URL)
 	})
 
-	t.Run("multiple unprocessed items exist, returns oldest", func(t *testing.T) {
+	t.Run("multiple pending items exist, returns oldest published", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		itemNewer := createTestItem("http://example.com/unprocessedNew", StatusUnprocessed, baseTime.Add(-1*time.Hour), 0, "UNew")
-		itemOlder := createTestItem("http://example.com/unprocessedOld", StatusUnprocessed, baseTime.Add(-2*time.Hour), 0, "UOld")
+		itemNewer := createTestItem("http://example.com/pendingNew", StatusPending, baseTime.Add(-1*time.Hour), baseTime, 0, "PNew")
+		itemOlder := createTestItem("http://example.com/pendingOld", StatusPending, baseTime.Add(-2*time.Hour), baseTime, 0, "POld")
 		err := repo.insert(context.Background(), itemNewer)
 		require.NoError(t, err)
 		err = repo.insert(context.Background(), itemOlder)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForSummarization(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, itemOlder.URL, items[0].URL, "Should return the oldest unprocessed item")
-		assert.True(t, itemOlder.PublishedAt.Equal(items[0].PublishedAt))
+		require.NotNil(t, item)
+		assert.Equal(t, itemOlder.URL, item.URL)
 	})
+}
 
-	t.Run("only deferred items exist", func(t *testing.T) {
+func TestItemRepository_GetItemForScreening(t *testing.T) {
+	baseTime := time.Now().Truncate(time.Second).UTC()
+
+	createTestItem := func(url string, status ItemStatus, publishedAt time.Time, lastCheckedAt time.Time, retryCount int, titleSuffix string) *Item {
+		return &Item{
+			URL:           url,
+			Title:         "Test Item " + titleSuffix,
+			PublishedAt:   publishedAt,
+			Status:        status,
+			Reason:        ReasonNone,
+			RetryCount:    retryCount,
+			CreatedAt:     baseTime,
+			LastCheckedAt: lastCheckedAt,
+		}
+	}
+
+	t.Run("no items to screen", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		deferredItem := createTestItem("http://example.com/deferred1", StatusDeferred, baseTime.Add(-1*time.Hour), 0, "D1")
-		err := repo.insert(context.Background(), deferredItem)
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-
-		items, err := repo.GetUnprocessedItems(context.Background())
-		require.NoError(t, err)
-		require.Equal(t, 1, len(items))
-		assert.Equal(t, deferredItem.URL, items[0].URL)
+		assert.Nil(t, item)
 	})
 
-	t.Run("only processed items exist", func(t *testing.T) {
+	t.Run("returns unprocessed item first", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		processedItem := createTestItem("http://example.com/processed1", StatusProcessed, baseTime.Add(-1*time.Hour), 0, "P1")
-		err := repo.insert(context.Background(), processedItem)
+		unprocessed := createTestItem("http://example.com/unprocessed", StatusUnprocessed, baseTime.Add(-2*time.Hour), baseTime, 0, "U")
+		deferred := createTestItem("http://example.com/deferred", StatusDeferred, baseTime.Add(-3*time.Hour), baseTime.Add(-3*time.Hour), 0, "D")
+		err := repo.insert(context.Background(), unprocessed)
+		require.NoError(t, err)
+		err = repo.insert(context.Background(), deferred)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-		require.Nil(t, items)
+		require.NotNil(t, item)
+		assert.Equal(t, unprocessed.URL, item.URL)
 	})
 
-	t.Run("unprocessed and deferred items exist, returns unprocessed", func(t *testing.T) {
+	t.Run("returns oldest deferred if no unprocessed", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()
 
-		unprocessedItem := createTestItem("http://example.com/unprocessed", StatusUnprocessed, baseTime.Add(-2*time.Hour), 0, "U")
-		deferredItem := createTestItem("http://example.com/deferred", StatusDeferred, baseTime.Add(-1*time.Hour), 0, "D")
-		err := repo.insert(context.Background(), unprocessedItem)
+		deferredNewer := createTestItem("http://example.com/deferredNew", StatusDeferred, baseTime, baseTime.Add(-1*time.Hour), 0, "DNew")
+		deferredOlder := createTestItem("http://example.com/deferredOld", StatusDeferred, baseTime, baseTime.Add(-2*time.Hour), 0, "DOld")
+		pending := createTestItem("http://example.com/pending", StatusPending, baseTime, baseTime, 0, "P")
+		err := repo.insert(context.Background(), deferredNewer)
 		require.NoError(t, err)
-		err = repo.insert(context.Background(), deferredItem)
+		err = repo.insert(context.Background(), deferredOlder)
+		require.NoError(t, err)
+		err = repo.insert(context.Background(), pending)
 		require.NoError(t, err)
 
-		items, err := repo.GetUnprocessedItems(context.Background())
+		item, err := repo.GetItemForScreening(context.Background())
 		require.NoError(t, err)
-		require.NotNil(t, items)
-		require.Len(t, items, 1)
-		assert.Equal(t, unprocessedItem.URL, items[0].URL, "Should prioritize unprocessed item")
-		assert.True(t, unprocessedItem.PublishedAt.Equal(items[0].PublishedAt))
-	})
-
-	t.Run("database error on first query", func(t *testing.T) {
-		repo, cleanup := setupTestDB(t)
-		// Do not defer cleanup immediately, we need to close DB first
-
-		repo.Close() // Close DB to simulate an error
-
-		items, err := repo.GetUnprocessedItems(context.Background())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get unprocessed items", "Error message should indicate unprocessed item query failure")
-		assert.Contains(t, err.Error(), "database is closed")
-		assert.Nil(t, items)
-		cleanup() // Call cleanup now
+		require.NotNil(t, item)
+		assert.Equal(t, deferredOlder.URL, item.URL)
 	})
 }

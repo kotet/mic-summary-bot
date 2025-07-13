@@ -32,11 +32,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := bot.UpdateItems(ctx); err != nil {
-		slog.Error("Failed to fetch and store items", "error", err)
-	}
+	if len(os.Args) > 1 {
+		command := os.Args[1]
+		switch command {
+		case "update":
+			if err := bot.RefreshFeedItems(ctx); err != nil {
+				slog.Error("Failed to fetch and store items", "error", err)
+			}
+		case "screen":
+			if err := bot.ScreenItem(ctx); err != nil {
+				slog.Error("Failed to screen item", "error", err)
+			}
+		case "post":
+			if err := bot.PostSummary(ctx); err != nil {
+				slog.Error("Failed to pick and post item", "error", err)
+			}
+		default:
+			slog.Error("Unknown command", "command", command)
+		}
+	} else {
+		if err := bot.RefreshFeedItems(ctx); err != nil {
+			slog.Error("Failed to fetch and store items", "error", err)
+		}
 
-	if err := bot.PostSummary(ctx); err != nil {
-		slog.Error("Failed to pick and post item", "error", err)
+		if err := bot.ScreenItem(ctx); err != nil {
+			slog.Error("Failed to screen item", "error", err)
+		}
+
+		if err := bot.PostSummary(ctx); err != nil {
+			slog.Error("Failed to pick and post item", "error", err)
+		}
 	}
 }

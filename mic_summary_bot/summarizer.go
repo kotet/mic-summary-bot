@@ -106,6 +106,9 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 		return SummarizeResult{}, fmt.Errorf("failed to execute prompt template: %w", err)
 	}
 	prompt := promptBuilder.String()
+	if prompt == "" {
+		return SummarizeResult{}, fmt.Errorf("prompt is empty")
+	}
 
 	parts := []*genai.Part{}
 	parts = append(parts, &genai.Part{
@@ -146,6 +149,10 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 	}
 
 	parts = append(parts, genai.NewPartFromText(prompt))
+	for i, part := range parts {
+		pkgLogger.Debug("parts created", "index", i, "part", part)
+	}
+
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
 
 	// LLMへのリクエストとリトライ処理

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -17,7 +19,8 @@ type ItemStatus int
 const (
 	StatusUnprocessed ItemStatus = iota // 0: unprocessed（未処理）
 	StatusDeferred                      // 1: deferred（先送り）
-	StatusProcessed                     // 2: processed（処理済み）
+	StatusPending                       // 2: pending（処理待ち）
+	StatusProcessed                     // 3: processed（処理済み）
 )
 
 // ItemReasonCode はアイテムが先送りまたは処理済みになった理由を表すコード
@@ -35,14 +38,15 @@ const (
 
 // Item は items テーブルのレコードを表す構造体
 type Item struct {
-	ID          int
-	URL         string
-	Title       string
-	PublishedAt time.Time
-	Status      ItemStatus
-	Reason      ItemReasonCode
-	RetryCount  int
-	CreatedAt   time.Time
+	ID            int
+	URL           string
+	Title         string
+	PublishedAt   time.Time
+	Status        ItemStatus
+	Reason        ItemReasonCode
+	RetryCount    int
+	CreatedAt     time.Time
+	LastCheckedAt time.Time
 }
 
 // ItemRepository は items テーブルへの操作を提供する
@@ -61,6 +65,14 @@ func formatQuery(query string) string {
 // NewItemRepository は新しいItemRepositoryインスタンスを作成し、データベース接続を初期化します。
 // テーブルが存在しない場合は作成します。
 func NewItemRepository(dbPath string, maxDeferredRetryCount int) (*ItemRepository, error) {
+	// if directory is not exists, create
+	if _, err := os.Stat(path.Dir(dbPath)); os.IsNotExist(err) {
+		err := os.MkdirAll(path.Dir(dbPath), 0755)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -82,10 +94,12 @@ func NewItemRepository(dbPath string, maxDeferredRetryCount int) (*ItemRepositor
 		status INTEGER NOT NULL,
 		reason INTEGER NOT NULL,
 		retry_count INTEGER NOT NULL,
-		created_at TIMESTAMP NOT NULL
+		created_at TIMESTAMP NOT NULL,
+		last_checked_at TIMESTAMP NOT NULL
 	);`,
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_items_url ON items(url);",
 		"CREATE INDEX IF NOT EXISTS idx_items_status_published_at ON items(status, published_at);",
+		"CREATE INDEX IF NOT EXISTS idx_items_status_last_checked_at ON items(status, last_checked_at);",
 	}
 	for _, createTableSQL := range createTableSQLs {
 		_, err = db.Exec(formatQuery(createTableSQL))
@@ -127,11 +141,11 @@ func withTransaction(ctx context.Context, db *sql.DB, txFunc func(*sql.Tx) error
 // insert
 func (r *ItemRepository) insert(ctx context.Context, item *Item) error {
 	insertSQL := `
-	INSERT INTO items (url, title, published_at, status, reason, retry_count, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?);
+	INSERT INTO items (url, title, published_at, status, reason, retry_count, created_at, last_checked_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 	`
 	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		_, err := tx.Exec(insertSQL, item.URL, item.Title, item.PublishedAt, item.Status, item.Reason, item.RetryCount, item.CreatedAt)
+		_, err := tx.Exec(insertSQL, item.URL, item.Title, item.PublishedAt, item.Status, item.Reason, item.RetryCount, item.CreatedAt, item.LastCheckedAt)
 		return err
 	})
 	if err != nil {
@@ -140,15 +154,15 @@ func (r *ItemRepository) insert(ctx context.Context, item *Item) error {
 	return nil
 }
 
-// Update
+// Update updates database content. It updates last_checked_at automatically
 func (r *ItemRepository) Update(ctx context.Context, item *Item) error {
 	updateSQL := `
 	UPDATE items
-	SET status = ?, reason = ?, retry_count = ?
+	SET status = ?, reason = ?, retry_count = ?, last_checked_at = ?
 	WHERE id = ?;
 	`
 	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
-		_, err := tx.Exec(updateSQL, item.Status, item.Reason, item.RetryCount, item.ID)
+		_, err := tx.Exec(updateSQL, item.Status, item.Reason, item.RetryCount, time.Now().UTC(), item.ID)
 		return err
 	})
 	if err != nil {
@@ -160,14 +174,14 @@ func (r *ItemRepository) Update(ctx context.Context, item *Item) error {
 // GetItemByURL
 func (r *ItemRepository) GetItemByURL(ctx context.Context, url string) (*Item, error) {
 	query := formatQuery(`
-	SELECT id, url, title, published_at, status, reason, retry_count, created_at
+	SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
 	FROM items
 	WHERE url = ?;
 	`)
 
 	row := r.db.QueryRowContext(ctx, query, url)
 	var item Item
-	err := row.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt)
+	err := row.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil // Item not found
 	}
@@ -177,60 +191,82 @@ func (r *ItemRepository) GetItemByURL(ctx context.Context, url string) (*Item, e
 	return &item, nil
 }
 
-// GetUnprocessedItems
-func (r *ItemRepository) GetUnprocessedItems(ctx context.Context) ([]*Item, error) {
+// GetItemForSummarization は要約対象のアイテムを取得します。
+func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, error) {
 	query := formatQuery(`
-	SELECT id, url, title, published_at, status, reason, retry_count, created_at
-	FROM items
-	WHERE status = ?
-	ORDER BY published_at ASC
-	LIMIT 1;
+		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+		FROM items
+		WHERE status = ?
+		ORDER BY published_at ASC
+		LIMIT 1;
 	`)
+
+	rows, err := r.db.QueryContext(ctx, query, StatusPending)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pending items: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var item Item
+		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan pending item: %w", err)
+		}
+		return &item, nil
+	}
+
+	return nil, nil // No pending items found
+}
+
+// GetItemForScreening はスクリーニング対象のアイテムを取得します。
+func (r *ItemRepository) GetItemForScreening(ctx context.Context) (*Item, error) {
+	// First, try to get an unprocessed item
+	query := formatQuery(`
+		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+		FROM items
+		WHERE status = ?
+		ORDER BY published_at ASC
+		LIMIT 1;
+	`)
+
 	rows, err := r.db.QueryContext(ctx, query, StatusUnprocessed)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil {
 		return nil, fmt.Errorf("failed to get unprocessed items: %w", err)
 	}
 	defer rows.Close()
 
-	if err == nil && rows.Next() {
+	if rows.Next() {
 		var item Item
-		err = rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt)
-		if err != nil {
+		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan unprocessed item: %w", err)
 		}
-		// Ensure times are UTC for consistency
-		item.PublishedAt = item.PublishedAt.UTC()
-		item.CreatedAt = item.CreatedAt.UTC()
-		return []*Item{&item}, nil
+		return &item, nil
 	}
 
-	// If no unprocessed items, check for deferred items with retry attempts left
+	// If no unprocessed items, check for deferred items
 	query = formatQuery(`
-	SELECT id, url, title, published_at, status, reason, retry_count, created_at
-	FROM items
-	WHERE status = ? AND retry_count < ?
-	ORDER BY published_at ASC
-	LIMIT 1;
+		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+		FROM items
+		WHERE status = ? AND retry_count < ?
+		ORDER BY last_checked_at ASC
+		LIMIT 1;
 	`)
-	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount) // Assuming max 3 retries for deferred
-	if err != nil && err != sql.ErrNoRows {
+
+	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount)
+	if err != nil {
 		return nil, fmt.Errorf("failed to get deferred items: %w", err)
 	}
 	defer rows.Close()
 
-	if err == nil && rows.Next() {
+	if rows.Next() {
 		var item Item
-		err = rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt)
-		if err != nil {
+		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan deferred item: %w", err)
 		}
-		// Ensure times are UTC for consistency
-		item.PublishedAt = item.PublishedAt.UTC()
-		item.CreatedAt = item.CreatedAt.UTC()
-		return []*Item{&item}, nil
+		return &item, nil
 	}
 
-	return nil, nil // No items found in either state
+	return nil, nil // No items found for screening
 }
 
 // IsURLExists
@@ -276,29 +312,32 @@ func (r *ItemRepository) AddItems(ctx context.Context, items []*gofeed.Item) (in
 			continue
 		}
 
+		now := time.Now().UTC()
 		// 存在しない場合、前回の最新より古いものは処理済みとする
 		if lastPublishedAt != nil && item.PublishedParsed.Before(*lastPublishedAt) {
 			err = r.insert(ctx, &Item{
-				URL:         item.Link,
-				Title:       item.Title,
-				PublishedAt: *item.PublishedParsed,
-				Status:      StatusProcessed,
-				Reason:      ReasonNone,
-				RetryCount:  0,
-				CreatedAt:   time.Now().UTC(),
+				URL:           item.Link,
+				Title:         item.Title,
+				PublishedAt:   *item.PublishedParsed,
+				Status:        StatusProcessed,
+				Reason:        ReasonNone,
+				RetryCount:    0,
+				CreatedAt:     now,
+				LastCheckedAt: now,
 			})
 			if err != nil {
 				return 0, err
 			}
 		} else {
 			err = r.insert(ctx, &Item{
-				URL:         item.Link,
-				Title:       item.Title,
-				PublishedAt: *item.PublishedParsed,
-				Status:      StatusUnprocessed,
-				Reason:      ReasonNone,
-				RetryCount:  0,
-				CreatedAt:   time.Now().UTC(),
+				URL:           item.Link,
+				Title:         item.Title,
+				PublishedAt:   *item.PublishedParsed,
+				Status:        StatusUnprocessed,
+				Reason:        ReasonNone,
+				RetryCount:    0,
+				CreatedAt:     now,
+				LastCheckedAt: now,
 			})
 			if err != nil {
 				return 0, err

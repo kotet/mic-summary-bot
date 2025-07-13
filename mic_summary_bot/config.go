@@ -49,7 +49,7 @@ type StorageConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path                string `yaml:"path"`
+	Path                  string `yaml:"path"`
 	MaxDeferredRetryCount int    `yaml:"max_deferred_retry_count"`
 }
 
@@ -61,7 +61,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	config := DefaultConfig()
-	err = yaml.Unmarshal(configYAML, config)
+	err = yaml.UnmarshalStrict(configYAML, config)
 	if err != nil {
 		return nil, err
 	}
