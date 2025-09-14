@@ -36,6 +36,50 @@ const (
 	MaxDocumentSize = 50 * 1024 * 1024 // 50MB in bytes
 )
 
+// getPartMetadata extracts metadata from a genai.Part for safe logging
+func getPartMetadata(part *genai.Part) map[string]interface{} {
+	metadata := make(map[string]interface{})
+
+	if part == nil {
+		metadata["type"] = "nil"
+		return metadata
+	}
+
+	// Check if part has InlineData (HTML content, file data)
+	if part.InlineData != nil {
+		metadata["type"] = "inline_data"
+		metadata["mime_type"] = part.InlineData.MIMEType
+		if part.InlineData.Data != nil {
+			metadata["data_size"] = len(part.InlineData.Data)
+		}
+		return metadata
+	}
+
+	// Check if part has FileData (uploaded file reference)
+	if part.FileData != nil {
+		metadata["type"] = "file_data"
+		metadata["mime_type"] = part.FileData.MIMEType
+		metadata["file_uri"] = part.FileData.FileURI
+		return metadata
+	}
+
+	// Check if part has Text
+	if part.Text != "" {
+		metadata["type"] = "text"
+		metadata["text_length"] = len(part.Text)
+		// Only show first 100 characters of text for debugging
+		if len(part.Text) > 100 {
+			metadata["text_preview"] = part.Text[:100] + "..."
+		} else {
+			metadata["text_preview"] = part.Text
+		}
+		return metadata
+	}
+
+	metadata["type"] = "unknown"
+	return metadata
+}
+
 // downloadFile は指定されたURLからファイルをダウンロードし、指定されたローカルパスに保存します。
 func downloadFile(url string, filepath string) error {
 	// Get the data
@@ -180,7 +224,8 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 	pkgLogger.Debug("Added prompt text to parts", "total_parts", len(parts))
 
 	for i, part := range parts {
-		pkgLogger.Debug("parts created", "index", i, "part", part)
+		metadata := getPartMetadata(part)
+		pkgLogger.Debug("part created", "index", i, "metadata", metadata)
 	}
 
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
