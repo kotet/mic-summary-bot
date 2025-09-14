@@ -3,7 +3,21 @@ package micsummarybot
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 )
+
+// handlePanic is a helper function for consistent panic handling
+func handlePanic(functionName string) error {
+	if r := recover(); r != nil {
+		stack := string(debug.Stack())
+		pkgLogger.Error("Panic occurred",
+			"function", functionName,
+			"panic", r,
+			"stack_trace", stack)
+		return fmt.Errorf("panic occurred in %s: %v", functionName, r)
+	}
+	return nil
+}
 
 type MICSummaryBot struct {
 	rssClient      *RSSClient
@@ -63,9 +77,8 @@ func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 
 func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			pkgLogger.Error("Panic occurred in PostSummary", "panic", r)
-			err = fmt.Errorf("panic occurred: %v", r)
+		if panicErr := handlePanic("PostSummary"); panicErr != nil {
+			err = panicErr
 		}
 	}()
 
@@ -118,7 +131,13 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	return nil
 }
 
-func (b *MICSummaryBot) ScreenItem(ctx context.Context) error {
+func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
+	defer func() {
+		if panicErr := handlePanic("ScreenItem"); panicErr != nil {
+			err = panicErr
+		}
+	}()
+
 	item, err := b.itemRepository.GetItemForScreening(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get item for screening: %w", err)
