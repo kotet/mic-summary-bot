@@ -28,6 +28,14 @@ type SummarizeResult struct {
 	FinalSummary string            `json:"final_summary"`
 }
 
+const (
+	// MaxDocumentSize represents the maximum file size (50MB) for documents
+	// that can be uploaded to Gemini API. This limitation is imposed by
+	// Google's Gemini API to ensure reasonable processing times and resource usage.
+	// Documents larger than this size will be skipped during summarization.
+	MaxDocumentSize = 50 * 1024 * 1024 // 50MB in bytes
+)
+
 // downloadFile は指定されたURLからファイルをダウンロードし、指定されたローカルパスに保存します。
 func downloadFile(url string, filepath string) error {
 	// Get the data
@@ -136,8 +144,8 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 	pkgLogger.Info("Processing documents for download", "count", len(htmlAndDocs.Documents))
 	for i, doc := range htmlAndDocs.Documents {
 		pkgLogger.Debug("Processing document", "index", i, "url", doc.URL, "size", doc.Size)
-		if doc.Size > 50*1024*1024 {
-			pkgLogger.Debug("Skipping document due to size limit", "url", doc.URL, "size", doc.Size)
+		if doc.Size > MaxDocumentSize {
+			pkgLogger.Debug("Skipping document due to size limit", "url", doc.URL, "size", doc.Size, "max_size", MaxDocumentSize)
 			continue
 		}
 		id := uuid.New().String()
