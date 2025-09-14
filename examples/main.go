@@ -12,14 +12,15 @@ import (
 func main() {
 	_ = godotenv.Load()
 
-	handlerOptions := &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, handlerOptions))
-	micsummarybot.SetLogger(logger)
+	// Set log level dynamically (works with default logger)
+	micsummarybot.SetLogLevel(slog.LevelDebug)
 
-	// Alternative way to set log level for the package logger:
-	// micsummarybot.SetLogLevel(slog.LevelDebug)
+	// Alternative: Use custom logger (SetLogLevel may not work)
+	// handlerOptions := &slog.HandlerOptions{
+	// 	Level: slog.LevelDebug,
+	// }
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, handlerOptions))
+	// micsummarybot.SetLogger(logger)
 
 	ctx := context.Background()
 
