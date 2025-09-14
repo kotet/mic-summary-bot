@@ -61,7 +61,14 @@ func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 	return nil
 }
 
-func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
+func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			pkgLogger.Error("Panic occurred in PostSummary", "panic", r)
+			err = fmt.Errorf("panic occurred: %v", r)
+		}
+	}()
+
 	pkgLogger.Info("Start posting summary")
 
 	item, err := b.itemRepository.GetItemForSummarization(ctx)
@@ -76,24 +83,36 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) error {
 
 	pkgLogger.Info("Processing pending item for summarization", "url", item.URL)
 
+	pkgLogger.Debug("Starting HTML parsing", "url", item.URL)
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
+		pkgLogger.Error("Failed to parse HTML", "url", item.URL, "error", err)
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
+	pkgLogger.Debug("HTML parsing completed successfully", "url", item.URL)
 
+	pkgLogger.Debug("Starting document summarization", "url", item.URL)
 	summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
 	if err != nil {
+		pkgLogger.Error("Failed to summarize content", "url", item.URL, "error", err)
 		return fmt.Errorf("failed to summarize content: %w", err)
 	}
+	pkgLogger.Debug("Document summarization completed", "url", item.URL)
 
+	pkgLogger.Debug("Starting Mastodon post", "url", item.URL)
 	if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
+		pkgLogger.Error("Failed to post to Mastodon", "url", item.URL, "error", err)
 		return fmt.Errorf("failed to post to mastodon: %w", err)
 	}
+	pkgLogger.Debug("Mastodon post completed successfully", "url", item.URL)
 
+	pkgLogger.Debug("Updating item status", "url", item.URL)
 	item.Status = StatusProcessed
 	if err := b.itemRepository.Update(ctx, item); err != nil {
+		pkgLogger.Error("Failed to update item status", "url", item.URL, "error", err)
 		return fmt.Errorf("failed to mark as posted: %w", err)
 	}
+	pkgLogger.Debug("Item status updated successfully", "url", item.URL)
 
 	pkgLogger.Info("Finish posting summary")
 	return nil

@@ -18,6 +18,9 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, handlerOptions))
 	micsummarybot.SetLogger(logger)
 
+	// Alternative way to set log level for the package logger:
+	// micsummarybot.SetLogLevel(slog.LevelDebug)
+
 	ctx := context.Background()
 
 	config, err := micsummarybot.LoadConfig("config.yaml")
