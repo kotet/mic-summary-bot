@@ -52,6 +52,18 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 	}, nil
 }
 
+// setItemToDeferred はアイテムをDeferredステータスに更新するヘルパー関数
+// エラー処理の共通化により、コードの重複を避け、保守性を向上させる
+func (b *MICSummaryBot) setItemToDeferred(ctx context.Context, item *Item, reason ItemReasonCode, originalErr error, logMsg string) {
+	pkgLogger.Error(logMsg, "url", item.URL, "error", originalErr)
+	item.Status = StatusDeferred
+	item.Reason = reason
+	item.RetryCount++
+	if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+		pkgLogger.Error("Failed to update item status after processing error", "url", item.URL, "original_error_context", logMsg, "update_error", updateErr)
+	}
+}
+
 func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 	pkgLogger.Info("Start updating items")
 	items, err := b.rssClient.FetchFeed(ctx, b.config.RSS.URL)
@@ -99,14 +111,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	pkgLogger.Debug("Starting HTML parsing", "url", item.URL)
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
-		pkgLogger.Error("Failed to parse HTML", "url", item.URL, "error", err)
-		// エラー時はdeferredにして後で再試行
-		item.Status = StatusDeferred
-		item.Reason = ReasonDownloadFailed
-		item.RetryCount++
-		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
-			pkgLogger.Error("Failed to update item status after HTML parse error", "url", item.URL, "error", updateErr)
-		}
+		b.setItemToDeferred(ctx, item, ReasonDownloadFailed, err, "Failed to parse HTML")
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 	pkgLogger.Debug("HTML parsing completed successfully", "url", item.URL)
@@ -114,28 +119,14 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	pkgLogger.Debug("Starting document summarization", "url", item.URL)
 	summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
 	if err != nil {
-		pkgLogger.Error("Failed to summarize content", "url", item.URL, "error", err)
-		// エラー時はdeferredにして後で再試行
-		item.Status = StatusDeferred
-		item.Reason = ReasonAPIFailed
-		item.RetryCount++
-		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
-			pkgLogger.Error("Failed to update item status after summarization error", "url", item.URL, "error", updateErr)
-		}
+		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to summarize content")
 		return fmt.Errorf("failed to summarize content: %w", err)
 	}
 	pkgLogger.Debug("Document summarization completed", "url", item.URL)
 
 	pkgLogger.Debug("Starting Mastodon post", "url", item.URL)
 	if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
-		pkgLogger.Error("Failed to post to Mastodon", "url", item.URL, "error", err)
-		// エラー時はdeferredにして後で再試行
-		item.Status = StatusDeferred
-		item.Reason = ReasonAPIFailed
-		item.RetryCount++
-		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
-			pkgLogger.Error("Failed to update item status after Mastodon post error", "url", item.URL, "error", updateErr)
-		}
+		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to post to Mastodon")
 		return fmt.Errorf("failed to post to mastodon: %w", err)
 	}
 	pkgLogger.Debug("Mastodon post completed successfully", "url", item.URL)
@@ -174,27 +165,13 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
-		pkgLogger.Error("Failed to parse HTML", "url", item.URL, "error", err)
-		// エラー時はdeferredにして後で再試行
-		item.Status = StatusDeferred
-		item.Reason = ReasonDownloadFailed
-		item.RetryCount++
-		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
-			pkgLogger.Error("Failed to update item status after HTML parse error", "url", item.URL, "error", updateErr)
-		}
+		b.setItemToDeferred(ctx, item, ReasonDownloadFailed, err, "Failed to parse HTML")
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 
 	screeningResult, err := b.genAIClient.IsWorthSummarizing(htmlAndDocs, b.config.Gemini.ScreeningPrompt)
 	if err != nil {
-		pkgLogger.Error("Failed to screen item", "url", item.URL, "error", err)
-		// エラー時はdeferredにして後で再試行
-		item.Status = StatusDeferred
-		item.Reason = ReasonAPIFailed
-		item.RetryCount++
-		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
-			pkgLogger.Error("Failed to update item status after screening error", "url", item.URL, "error", updateErr)
-		}
+		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to screen item")
 		return fmt.Errorf("failed to screen item: %w", err)
 	}
 	pkgLogger.Info("Item screening result", "url", item.URL, "result", screeningResult.FinalResult)
