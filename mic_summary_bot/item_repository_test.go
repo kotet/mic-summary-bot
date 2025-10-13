@@ -452,6 +452,31 @@ func TestItemRepository_GetItemForSummarization(t *testing.T) {
 		require.NotNil(t, item)
 		assert.Equal(t, itemOlder.URL, item.URL)
 	})
+
+	t.Run("last_checked_at is updated when item is retrieved", func(t *testing.T) {
+		repo, cleanup := setupTestDB(t)
+		defer cleanup()
+
+		oldTime := baseTime.Add(-1 * time.Hour)
+		pendingItem := createTestItem("http://example.com/pending", StatusPending, baseTime, oldTime, 0, "P")
+		err := repo.insert(context.Background(), pendingItem)
+		require.NoError(t, err)
+
+		// Wait a bit to ensure time difference
+		time.Sleep(10 * time.Millisecond)
+
+		item, err := repo.GetItemForSummarization(context.Background())
+		require.NoError(t, err)
+		require.NotNil(t, item)
+		assert.Equal(t, pendingItem.URL, item.URL)
+		// last_checked_at should be updated and newer than the old time
+		assert.True(t, item.LastCheckedAt.After(oldTime), "last_checked_at should be updated")
+
+		// Verify in database
+		dbItem, err := repo.GetItemByURL(context.Background(), item.URL)
+		require.NoError(t, err)
+		assert.True(t, dbItem.LastCheckedAt.After(oldTime), "last_checked_at should be updated in database")
+	})
 }
 
 func TestItemRepository_GetItemForScreening(t *testing.T) {
@@ -514,5 +539,30 @@ func TestItemRepository_GetItemForScreening(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, item)
 		assert.Equal(t, deferredOlder.URL, item.URL)
+	})
+
+	t.Run("last_checked_at is updated when item is retrieved", func(t *testing.T) {
+		repo, cleanup := setupTestDB(t)
+		defer cleanup()
+
+		oldTime := baseTime.Add(-2 * time.Hour)
+		unprocessedItem := createTestItem("http://example.com/unprocessed", StatusUnprocessed, baseTime, oldTime, 0, "U")
+		err := repo.insert(context.Background(), unprocessedItem)
+		require.NoError(t, err)
+
+		// Wait a bit to ensure time difference
+		time.Sleep(10 * time.Millisecond)
+
+		item, err := repo.GetItemForScreening(context.Background())
+		require.NoError(t, err)
+		require.NotNil(t, item)
+		assert.Equal(t, unprocessedItem.URL, item.URL)
+		// last_checked_at should be updated and newer than the old time
+		assert.True(t, item.LastCheckedAt.After(oldTime), "last_checked_at should be updated")
+
+		// Verify in database
+		dbItem, err := repo.GetItemByURL(context.Background(), item.URL)
+		require.NoError(t, err)
+		assert.True(t, dbItem.LastCheckedAt.After(oldTime), "last_checked_at should be updated in database")
 	})
 }

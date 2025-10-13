@@ -192,81 +192,120 @@ func (r *ItemRepository) GetItemByURL(ctx context.Context, url string) (*Item, e
 }
 
 // GetItemForSummarization は要約対象のアイテムを取得します。
+// 取得したアイテムのlast_checked_atを即座に更新します。
 func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, error) {
-	query := formatQuery(`
-		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
-		FROM items
-		WHERE status = ?
-		ORDER BY published_at ASC
-		LIMIT 1;
-	`)
+	var item *Item
+	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
+		query := formatQuery(`
+			SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+			FROM items
+			WHERE status = ?
+			ORDER BY published_at ASC
+			LIMIT 1;
+		`)
 
-	rows, err := r.db.QueryContext(ctx, query, StatusPending)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending items: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		var item Item
-		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan pending item: %w", err)
+		rows, err := tx.QueryContext(ctx, query, StatusPending)
+		if err != nil {
+			return fmt.Errorf("failed to get pending items: %w", err)
 		}
-		return &item, nil
+		defer rows.Close()
+
+		if rows.Next() {
+			item = &Item{}
+			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
+				return fmt.Errorf("failed to scan pending item: %w", err)
+			}
+
+			// 取得した時点でlast_checked_atを更新
+			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
+			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
+				return fmt.Errorf("failed to update last_checked_at: %w", err)
+			}
+			item.LastCheckedAt = time.Now().UTC()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, nil // No pending items found
+	return item, nil // item will be nil if no pending items found
 }
 
 // GetItemForScreening はスクリーニング対象のアイテムを取得します。
+// 取得したアイテムのlast_checked_atを即座に更新します。
 func (r *ItemRepository) GetItemForScreening(ctx context.Context) (*Item, error) {
-	// First, try to get an unprocessed item
-	query := formatQuery(`
-		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
-		FROM items
-		WHERE status = ?
-		ORDER BY published_at ASC
-		LIMIT 1;
-	`)
+	var item *Item
+	err := withTransaction(ctx, r.db, func(tx *sql.Tx) error {
+		// First, try to get an unprocessed item
+		query := formatQuery(`
+			SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+			FROM items
+			WHERE status = ?
+			ORDER BY published_at ASC
+			LIMIT 1;
+		`)
 
-	rows, err := r.db.QueryContext(ctx, query, StatusUnprocessed)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get unprocessed items: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		var item Item
-		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan unprocessed item: %w", err)
+		rows, err := tx.QueryContext(ctx, query, StatusUnprocessed)
+		if err != nil {
+			return fmt.Errorf("failed to get unprocessed items: %w", err)
 		}
-		return &item, nil
-	}
+		defer rows.Close()
 
-	// If no unprocessed items, check for deferred items
-	query = formatQuery(`
-		SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
-		FROM items
-		WHERE status = ? AND retry_count < ?
-		ORDER BY last_checked_at ASC
-		LIMIT 1;
-	`)
+		if rows.Next() {
+			item = &Item{}
+			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
+				return fmt.Errorf("failed to scan unprocessed item: %w", err)
+			}
 
-	rows, err = r.db.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deferred items: %w", err)
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		var item Item
-		if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan deferred item: %w", err)
+			// 取得した時点でlast_checked_atを更新
+			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
+			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
+				return fmt.Errorf("failed to update last_checked_at: %w", err)
+			}
+			item.LastCheckedAt = time.Now().UTC()
+			return nil
 		}
-		return &item, nil
+
+		// If no unprocessed items, check for deferred items
+		query = formatQuery(`
+			SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
+			FROM items
+			WHERE status = ? AND retry_count < ?
+			ORDER BY last_checked_at ASC
+			LIMIT 1;
+		`)
+
+		rows, err = tx.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount)
+		if err != nil {
+			return fmt.Errorf("failed to get deferred items: %w", err)
+		}
+		defer rows.Close()
+
+		if rows.Next() {
+			item = &Item{}
+			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
+				return fmt.Errorf("failed to scan deferred item: %w", err)
+			}
+
+			// 取得した時点でlast_checked_atを更新
+			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
+			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
+				return fmt.Errorf("failed to update last_checked_at: %w", err)
+			}
+			item.LastCheckedAt = time.Now().UTC()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, nil // No items found for screening
+	return item, nil // item will be nil if no items found for screening
 }
 
 // IsURLExists

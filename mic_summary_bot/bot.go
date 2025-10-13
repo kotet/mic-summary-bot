@@ -100,6 +100,13 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
 		pkgLogger.Error("Failed to parse HTML", "url", item.URL, "error", err)
+		// エラー時はdeferredにして後で再試行
+		item.Status = StatusDeferred
+		item.Reason = ReasonDownloadFailed
+		item.RetryCount++
+		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+			pkgLogger.Error("Failed to update item status after HTML parse error", "url", item.URL, "error", updateErr)
+		}
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 	pkgLogger.Debug("HTML parsing completed successfully", "url", item.URL)
@@ -108,6 +115,13 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
 	if err != nil {
 		pkgLogger.Error("Failed to summarize content", "url", item.URL, "error", err)
+		// エラー時はdeferredにして後で再試行
+		item.Status = StatusDeferred
+		item.Reason = ReasonAPIFailed
+		item.RetryCount++
+		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+			pkgLogger.Error("Failed to update item status after summarization error", "url", item.URL, "error", updateErr)
+		}
 		return fmt.Errorf("failed to summarize content: %w", err)
 	}
 	pkgLogger.Debug("Document summarization completed", "url", item.URL)
@@ -115,12 +129,20 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	pkgLogger.Debug("Starting Mastodon post", "url", item.URL)
 	if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
 		pkgLogger.Error("Failed to post to Mastodon", "url", item.URL, "error", err)
+		// エラー時はdeferredにして後で再試行
+		item.Status = StatusDeferred
+		item.Reason = ReasonAPIFailed
+		item.RetryCount++
+		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+			pkgLogger.Error("Failed to update item status after Mastodon post error", "url", item.URL, "error", updateErr)
+		}
 		return fmt.Errorf("failed to post to mastodon: %w", err)
 	}
 	pkgLogger.Debug("Mastodon post completed successfully", "url", item.URL)
 
 	pkgLogger.Debug("Updating item status", "url", item.URL)
 	item.Status = StatusProcessed
+	item.Reason = ReasonNone
 	if err := b.itemRepository.Update(ctx, item); err != nil {
 		pkgLogger.Error("Failed to update item status", "url", item.URL, "error", err)
 		return fmt.Errorf("failed to mark as posted: %w", err)
@@ -152,11 +174,27 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
+		pkgLogger.Error("Failed to parse HTML", "url", item.URL, "error", err)
+		// エラー時はdeferredにして後で再試行
+		item.Status = StatusDeferred
+		item.Reason = ReasonDownloadFailed
+		item.RetryCount++
+		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+			pkgLogger.Error("Failed to update item status after HTML parse error", "url", item.URL, "error", updateErr)
+		}
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 
 	screeningResult, err := b.genAIClient.IsWorthSummarizing(htmlAndDocs, b.config.Gemini.ScreeningPrompt)
 	if err != nil {
+		pkgLogger.Error("Failed to screen item", "url", item.URL, "error", err)
+		// エラー時はdeferredにして後で再試行
+		item.Status = StatusDeferred
+		item.Reason = ReasonAPIFailed
+		item.RetryCount++
+		if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
+			pkgLogger.Error("Failed to update item status after screening error", "url", item.URL, "error", updateErr)
+		}
 		return fmt.Errorf("failed to screen item: %w", err)
 	}
 	pkgLogger.Info("Item screening result", "url", item.URL, "result", screeningResult.FinalResult)
@@ -179,6 +217,7 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 	case WorthSummarizingWait:
 		item.Status = StatusDeferred
 		item.Reason = ReasonGeminiPageNotReady
+		item.RetryCount++
 		if err := b.itemRepository.Update(ctx, item); err != nil {
 			return fmt.Errorf("failed to mark as not ready: %w", err)
 		}
