@@ -191,6 +191,35 @@ func (r *ItemRepository) GetItemByURL(ctx context.Context, url string) (*Item, e
 	return &item, nil
 }
 
+// getItemWithStatusAndUpdateLastChecked は指定されたステータスのアイテムを取得し、last_checked_atを更新します。
+// トランザクション内で呼び出され、アイテムが見つからない場合はnilを返します。
+func (r *ItemRepository) getItemWithStatusAndUpdateLastChecked(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (*Item, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, nil // No item found
+	}
+
+	item := &Item{}
+	if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
+		return nil, err
+	}
+
+	// time.Now().UTC()を一度だけ呼び出して一貫性を保つ
+	now := time.Now().UTC()
+	updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
+	if _, err := tx.Exec(updateSQL, now, item.ID); err != nil {
+		return nil, fmt.Errorf("failed to update last_checked_at: %w", err)
+	}
+	item.LastCheckedAt = now
+
+	return item, nil
+}
+
 // GetItemForSummarization は要約対象のアイテムを取得します。
 // 取得したアイテムのlast_checked_atを即座に更新します。
 func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, error) {
@@ -204,24 +233,10 @@ func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, er
 			LIMIT 1;
 		`)
 
-		rows, err := tx.QueryContext(ctx, query, StatusPending)
+		var err error
+		item, err = r.getItemWithStatusAndUpdateLastChecked(ctx, tx, query, StatusPending)
 		if err != nil {
 			return fmt.Errorf("failed to get pending items: %w", err)
-		}
-		defer rows.Close()
-
-		if rows.Next() {
-			item = &Item{}
-			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-				return fmt.Errorf("failed to scan pending item: %w", err)
-			}
-
-			// 取得した時点でlast_checked_atを更新
-			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
-			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
-				return fmt.Errorf("failed to update last_checked_at: %w", err)
-			}
-			item.LastCheckedAt = time.Now().UTC()
 		}
 
 		return nil
@@ -248,24 +263,14 @@ func (r *ItemRepository) GetItemForScreening(ctx context.Context) (*Item, error)
 			LIMIT 1;
 		`)
 
-		rows, err := tx.QueryContext(ctx, query, StatusUnprocessed)
+		var err error
+		item, err = r.getItemWithStatusAndUpdateLastChecked(ctx, tx, query, StatusUnprocessed)
 		if err != nil {
 			return fmt.Errorf("failed to get unprocessed items: %w", err)
 		}
-		defer rows.Close()
 
-		if rows.Next() {
-			item = &Item{}
-			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-				return fmt.Errorf("failed to scan unprocessed item: %w", err)
-			}
-
-			// 取得した時点でlast_checked_atを更新
-			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
-			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
-				return fmt.Errorf("failed to update last_checked_at: %w", err)
-			}
-			item.LastCheckedAt = time.Now().UTC()
+		// If unprocessed item found, return early
+		if item != nil {
 			return nil
 		}
 
@@ -278,24 +283,9 @@ func (r *ItemRepository) GetItemForScreening(ctx context.Context) (*Item, error)
 			LIMIT 1;
 		`)
 
-		rows, err = tx.QueryContext(ctx, query, StatusDeferred, r.maxDeferredRetryCount)
+		item, err = r.getItemWithStatusAndUpdateLastChecked(ctx, tx, query, StatusDeferred, r.maxDeferredRetryCount)
 		if err != nil {
 			return fmt.Errorf("failed to get deferred items: %w", err)
-		}
-		defer rows.Close()
-
-		if rows.Next() {
-			item = &Item{}
-			if err := rows.Scan(&item.ID, &item.URL, &item.Title, &item.PublishedAt, &item.Status, &item.Reason, &item.RetryCount, &item.CreatedAt, &item.LastCheckedAt); err != nil {
-				return fmt.Errorf("failed to scan deferred item: %w", err)
-			}
-
-			// 取得した時点でlast_checked_atを更新
-			updateSQL := `UPDATE items SET last_checked_at = ? WHERE id = ?;`
-			if _, err := tx.Exec(updateSQL, time.Now().UTC(), item.ID); err != nil {
-				return fmt.Errorf("failed to update last_checked_at: %w", err)
-			}
-			item.LastCheckedAt = time.Now().UTC()
 		}
 
 		return nil
