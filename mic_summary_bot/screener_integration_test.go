@@ -17,9 +17,9 @@ import (
 )
 
 func TestIsWorthSummarizing(t *testing.T) {
-	apiKey := os.Getenv("GENAI_API_KEY")
+	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		t.Skip("GENAI_API_KEY environment variable not set, skipping integration test.")
+		t.Skip("GEMINI_API_KEY environment variable not set, skipping integration test.")
 	}
 
 	ctx := context.Background()
