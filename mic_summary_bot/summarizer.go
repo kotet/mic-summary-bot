@@ -24,7 +24,9 @@ type DocumentSummary struct {
 
 type SummarizeResult struct {
 	Documents    []DocumentSummary `json:"documents"`
+	FirstSummary string            `json:"first_summary"`
 	Omissibles   []string          `json:"omissibles"`
+	MissedItems  []string          `json:"missed_items"`
 	FinalSummary string            `json:"final_summary"`
 }
 
@@ -81,7 +83,7 @@ func getPartMetadata(part *genai.Part) map[string]interface{} {
 }
 
 // downloadFile は指定されたURLからファイルをダウンロードし、指定されたローカルパスに保存します。
-func downloadFile(url string, filepath string) error {
+var downloadFile = func(url string, filepath string) error {
 	// Get the data
 	resp, err := http.Get(url)
 	if err != nil {
@@ -135,7 +137,16 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 						PropertyOrdering: []string{"metadata", "keyPoints", "summary"},
 					},
 				},
+				"first_summary": {
+					Type: genai.TypeString,
+				},
 				"omissibles": {
+					Type: genai.TypeArray,
+					Items: &genai.Schema{
+						Type: genai.TypeString,
+					},
+				},
+				"missed_items": {
 					Type: genai.TypeArray,
 					Items: &genai.Schema{
 						Type: genai.TypeString,

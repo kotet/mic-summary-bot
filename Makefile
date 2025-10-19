@@ -20,5 +20,7 @@ test:
 test-full:
 	go test -v -tags=integration ./...
 
+test-integration: test-full
+
 clean:
 	rm -f examples-bot

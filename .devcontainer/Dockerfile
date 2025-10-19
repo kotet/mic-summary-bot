@@ -1,5 +1,7 @@
 FROM ubuntu:22.04
 
+ARG HOME=/home/vscode
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ENV LANG=C.UTF-8
@@ -31,7 +33,7 @@ RUN apt-get update --no-install-recommends \
 ARG GO_VERSION=1.24.3
 RUN curl "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" -L --output go.tar.gz \
     && tar xvf go.tar.gz -C /usr/local/ \
-    && echo 'export PATH=$PATH:/usr/local/go/bin:/home/vscode/.local/bin' >> /etc/profile \
+    && echo 'export PATH=$PATH:/usr/local/go/bin:/home/vscode/.local/bin:/home/vscode/go/bin' >> /etc/profile \
     && rm go.tar.gz
 
 ARG NODE_VERSION=22.14.0
@@ -46,12 +48,18 @@ RUN --mount=type=cache,target=/var/cache/apt set -x \
     && curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz  -o /tmp/node.tar.xz \
     && tar -xJf /tmp/node.tar.xz -C /tmp \
     && cp -R /tmp/node-v${NODE_VERSION}-linux-x64/* ${NODE_HOME}/ \
+    && ${NODE_HOME}/bin/npm config set prefix ${HOME}/.node \
     && rm -rf /tmp/node.tar.xz /tmp/node-v${NODE_VERSION}-linux-x64
+
+RUN groupadd --gid 1000 vscode \
+    && useradd --uid 1000 --gid 1000 --create-home vscode \
+    && chown -R vscode:vscode ${HOME}
+
+USER vscode
+
+ENV PATH="${HOME}/.node/bin:${PATH}"
 
 RUN npm install -g @google/gemini-cli
 
-RUN groupadd --gid 1000 vscode \
-    && useradd --uid 1000 --gid 1000 -m vscode
-
-USER vscode
-ENV HOME /home/vscode
+RUN /usr/local/go/bin/go install golang.org/x/tools/gopls@latest \
+    && /usr/local/go/bin/go install honnef.co/go/tools/cmd/staticcheck@latest

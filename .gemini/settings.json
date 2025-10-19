@@ -1,0 +1,26 @@
+{
+  "context": {
+    "fileName": "AGENTS.md"
+  },
+  "mcpServers": {
+    "gopls": {
+      "command": "npx",
+      "args": [
+        "@mizchi/lsmcp@0.10.0",
+        "--bin",
+        "gopls",
+        "--files",
+        "**/*.go"
+      ],
+      "excludeTools": [
+        "delete_memory",
+        "list_memory",
+        "read_memory",
+        "write_memory"
+      ]
+    },
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp"
+    }
+  }
+}
