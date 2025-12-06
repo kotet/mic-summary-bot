@@ -156,7 +156,7 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 					Type: genai.TypeString,
 				},
 			},
-			PropertyOrdering: []string{"documents", "omissibles", "final_summary"},
+			PropertyOrdering: []string{"documents", "first_summary", "omissibles", "missed_items", "final_summary"},
 			Required:         []string{"final_summary"},
 		},
 	}
