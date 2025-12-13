@@ -22,7 +22,7 @@ gemini:
   # api_key: ""
   max_tokens: 65535
   retry_count: 3
-  retry_interval_sec: 5
+  retry_interval_sec: 60
   screening_model: "gemini-2.5-flash-lite"
   screening_prompt: |
     Webページの内容を見て、要約する価値があるかどうかを判断してください。
