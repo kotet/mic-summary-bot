@@ -22,8 +22,8 @@ gemini:
   # api_key: ""
   max_tokens: 65535
   retry_count: 3
-  retry_interval_sec: 5
-  screening_model: "gemini-2.0-flash"
+  retry_interval_sec: 60
+  screening_model: "gemini-2.5-flash-lite"
   screening_prompt: |
     Webページの内容を見て、要約する価値があるかどうかを判断してください。
 
@@ -42,7 +42,7 @@ gemini:
     Webページに含まれる添付資料 {{ len .Documents }}件:
     {{ range .Documents }}
     - URL: {{ .URL }}, Size: {{ .Size }} bytes{{ end }}
-  summarizing_model: "gemini-2.5-pro"
+  summarizing_model: "gemini-2.5-flash"
   summarizing_prompt: |
     あなたは「総務省会議議事録要約ツール」です。
       1) 会議のメタ情報を含むWebページ(HTMLテキスト)
