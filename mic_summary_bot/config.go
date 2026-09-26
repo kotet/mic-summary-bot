@@ -36,11 +36,11 @@ type GeminiConfig struct {
 }
 
 type MastodonConfig struct {
-	InstanceURL  string `yaml:"instance_url"`
-	AccessToken  string `yaml:"access_token"`
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	PostTemplate      string `yaml:"post_template"`
+	InstanceURL         string `yaml:"instance_url"`
+	AccessToken         string `yaml:"access_token"`
+	ClientID            string `yaml:"client_id"`
+	ClientSecret        string `yaml:"client_secret"`
+	PostTemplate        string `yaml:"post_template"`
 	NoValuePostTemplate string `yaml:"no_value_post_template"`
 }
 
