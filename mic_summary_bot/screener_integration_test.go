@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,5 +110,6 @@ func TestIsWorthSummarizing(t *testing.T) {
 				assert.Equal(t, tc.expectedResponse, response.FinalResult, "Unexpected screening result: %#v", response)
 			}
 		})
+		time.Sleep(60 * time.Second)
 	}
 }
