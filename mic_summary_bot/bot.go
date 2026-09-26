@@ -52,13 +52,26 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 	}, nil
 }
 
-// setItemToDeferred はアイテムをDeferredステータスに更新するヘルパー関数
+// markItemDeferred は処理を先送りするアイテムの retry_count を増やし、status を deferred に変更する。
+// retry_count が maxDeferredRetryCount に達したアイテムは以後 deferred として選択されないため、
+// 代わりに processed (ReasonRetryLimitExceeded) に変更して ERROR ログを出す。DBへの保存は呼び出し元が行う
+func markItemDeferred(item *Item, reason ItemReasonCode, maxDeferredRetryCount int) {
+	item.RetryCount++
+	if item.RetryCount >= maxDeferredRetryCount {
+		pkgLogger.Error("Retry limit exceeded, skipping item", "url", item.URL, "retry_count", item.RetryCount, "last_reason", reason)
+		item.Status = StatusProcessed
+		item.Reason = ReasonRetryLimitExceeded
+		return
+	}
+	item.Status = StatusDeferred
+	item.Reason = reason
+}
+
+// setItemToDeferred はエラーをログに出し、アイテムを deferred (リトライ上限に達した場合は processed) に更新するヘルパー関数
 // エラー処理の共通化により、コードの重複を避け、保守性を向上させる
 func (b *MICSummaryBot) setItemToDeferred(ctx context.Context, item *Item, reason ItemReasonCode, originalErr error, logMsg string) {
 	pkgLogger.Error(logMsg, "url", item.URL, "error", originalErr)
-	item.Status = StatusDeferred
-	item.Reason = reason
-	item.RetryCount++
+	markItemDeferred(item, reason, b.config.Database.MaxDeferredRetryCount)
 	if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
 		pkgLogger.Error("Failed to update item status after processing error", "url", item.URL, "original_error_context", logMsg, "update_error", updateErr)
 	}
@@ -192,9 +205,7 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 			return fmt.Errorf("failed to post no value message to mastodon: %w", err)
 		}
 	case WorthSummarizingWait:
-		item.Status = StatusDeferred
-		item.Reason = ReasonGeminiPageNotReady
-		item.RetryCount++
+		markItemDeferred(item, ReasonGeminiPageNotReady, b.config.Database.MaxDeferredRetryCount)
 		if err := b.itemRepository.Update(ctx, item); err != nil {
 			return fmt.Errorf("failed to mark as not ready: %w", err)
 		}
