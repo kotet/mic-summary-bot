@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM mcr.microsoft.com/devcontainers/base:bookworm
 
 ARG HOME=/home/vscode
 
@@ -51,15 +51,11 @@ RUN --mount=type=cache,target=/var/cache/apt set -x \
     && ${NODE_HOME}/bin/npm config set prefix ${HOME}/.node \
     && rm -rf /tmp/node.tar.xz /tmp/node-v${NODE_VERSION}-linux-x64
 
-RUN groupadd --gid 1000 vscode \
-    && useradd --uid 1000 --gid 1000 --create-home vscode \
-    && chown -R vscode:vscode ${HOME}
+RUN chown -R vscode:vscode ${HOME}
 
 USER vscode
 
 ENV PATH="${HOME}/.node/bin:${PATH}"
-
-RUN npm install -g @google/gemini-cli
 
 RUN /usr/local/go/bin/go install golang.org/x/tools/gopls@latest \
     && /usr/local/go/bin/go install honnef.co/go/tools/cmd/staticcheck@latest
