@@ -18,6 +18,8 @@ storage:
   keep_local_copy: true
 database:
   path: "./data/database.sqlite"
+  # deferred状態のアイテムを再処理する回数の上限(1以上)。retry_countがこの値に達したアイテムはprocessed(リトライ回数上限超過)としてスキップされ、ERRORログが出力される
+  max_deferred_retry_count: 3
 gemini:
   # api_key: ""
   max_tokens: 65535

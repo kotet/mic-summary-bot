@@ -1,6 +1,7 @@
 package micsummarybot
 
 import (
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -36,11 +37,11 @@ type GeminiConfig struct {
 }
 
 type MastodonConfig struct {
-	InstanceURL  string `yaml:"instance_url"`
-	AccessToken  string `yaml:"access_token"`
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	PostTemplate      string `yaml:"post_template"`
+	InstanceURL         string `yaml:"instance_url"`
+	AccessToken         string `yaml:"access_token"`
+	ClientID            string `yaml:"client_id"`
+	ClientSecret        string `yaml:"client_secret"`
+	PostTemplate        string `yaml:"post_template"`
 	NoValuePostTemplate string `yaml:"no_value_post_template"`
 }
 
@@ -50,11 +51,13 @@ type StorageConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path                  string `yaml:"path"`
-	MaxDeferredRetryCount int    `yaml:"max_deferred_retry_count"`
+	Path string `yaml:"path"`
+	// MaxDeferredRetryCount は deferred のアイテムを再処理する回数の上限。1以上でなければならない
+	MaxDeferredRetryCount int `yaml:"max_deferred_retry_count"`
 }
 
-// LoadConfig は指定されたパスから設定ファイルを読み込み、Config構造体にパースします。記述されていない項目はデフォルト値が使われます
+// LoadConfig は指定されたパスから設定ファイルを読み込み、Config構造体にパースします。記述されていない項目はデフォルト値が使われます。
+// 設定値が不正な場合はエラーを返します
 func LoadConfig(configPath string) (*Config, error) {
 	configYAML, err := os.ReadFile(configPath)
 	if err != nil {
@@ -65,6 +68,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	err = yaml.UnmarshalStrict(configYAML, config)
 	if err != nil {
 		return nil, err
+	}
+
+	// 0以下だと deferred の選択条件 retry_count < max_deferred_retry_count を満たす行が無くなり、deferred が一度も再処理されない
+	if config.Database.MaxDeferredRetryCount <= 0 {
+		return nil, fmt.Errorf("database.max_deferred_retry_count must be 1 or greater, got %d", config.Database.MaxDeferredRetryCount)
 	}
 
 	return config, nil

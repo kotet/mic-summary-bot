@@ -63,7 +63,7 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
         * `reason`に該当する`ItemReasonCode`
         * `retry_count`をインクリメントする。
     * **リトライ回数上限超過**:
-        * `retry_count`が設定された上限値を超えた場合、`status`を`3` (`processed`) に更新する。
+        * `retry_count`をインクリメントした結果、設定された上限値 (`database.max_deferred_retry_count`) に達した場合、`deferred`の代わりに`status`を`3` (`processed`) に更新する。
         * `reason`に`6` (`ReasonRetryLimitExceeded`) を記録する。
 
 4.  **処理済みアイテムの扱い**:
