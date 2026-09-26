@@ -209,6 +209,12 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 		if err := b.itemRepository.Update(ctx, item); err != nil {
 			return fmt.Errorf("failed to mark as not ready: %w", err)
 		}
+	default:
+		// スキーマに反する値や空文字が返った場合、unprocessed のまま残すと同じアイテムが毎回選ばれ
+		// 後続のアイテムが判定されなくなるため、deferred にしてリトライ上限の仕組みに乗せる
+		unexpectedResultErr := fmt.Errorf("unexpected screening result: %q", screeningResult.FinalResult)
+		b.setItemToDeferred(ctx, item, ReasonAPIFailed, unexpectedResultErr, "Unexpected screening result")
+		return unexpectedResultErr
 	}
 
 	return nil
