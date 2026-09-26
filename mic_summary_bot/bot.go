@@ -6,17 +6,17 @@ import (
 	"runtime/debug"
 )
 
-// handlePanic is a helper function for consistent panic handling
-func handlePanic(functionName string) error {
-	if r := recover(); r != nil {
-		stack := string(debug.Stack())
-		pkgLogger.Error("Panic occurred",
-			"function", functionName,
-			"panic", r,
-			"stack_trace", stack)
-		return fmt.Errorf("panic occurred in %s: %v", functionName, r)
-	}
-	return nil
+// handlePanic is a helper function for consistent panic handling.
+// It logs the recovered value with a stack trace and converts it to an error.
+// recover() must be called directly in the deferred function, not here,
+// because recover() only stops a panic when called directly by a deferred function.
+func handlePanic(functionName string, recovered any) error {
+	stack := string(debug.Stack())
+	pkgLogger.Error("Panic occurred",
+		"function", functionName,
+		"panic", recovered,
+		"stack_trace", stack)
+	return fmt.Errorf("panic occurred in %s: %v", functionName, recovered)
 }
 
 type MICSummaryBot struct {
@@ -89,8 +89,8 @@ func (b *MICSummaryBot) RefreshFeedItems(ctx context.Context) error {
 
 func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	defer func() {
-		if panicErr := handlePanic("PostSummary"); panicErr != nil {
-			err = panicErr
+		if r := recover(); r != nil {
+			err = handlePanic("PostSummary", r)
 		}
 	}()
 
@@ -146,8 +146,8 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 
 func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 	defer func() {
-		if panicErr := handlePanic("ScreenItem"); panicErr != nil {
-			err = panicErr
+		if r := recover(); r != nil {
+			err = handlePanic("ScreenItem", r)
 		}
 	}()
 
