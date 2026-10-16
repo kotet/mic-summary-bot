@@ -32,7 +32,6 @@ func TestIsWorthSummarizing(t *testing.T) {
 	config := DefaultConfig()
 	client := &GenAIClient{
 		Client:         genaiClient,
-		MaxRetry:       config.Gemini.RetryCount,
 		ScreeningModel: config.Gemini.ScreeningModel,
 	}
 

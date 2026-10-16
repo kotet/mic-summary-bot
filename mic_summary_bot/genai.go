@@ -9,8 +9,6 @@ import (
 
 type GenAIClient struct {
 	Client           *genai.Client
-	MaxRetry         int
-	RetryIntervalSec int
 	ScreeningModel   string
 	SummarizingModel string
 	DownloadDir      string
@@ -28,8 +26,6 @@ func NewGenAIClient(gemini *GeminiConfig, storage *StorageConfig) (*GenAIClient,
 
 	return &GenAIClient{
 		Client:           client,
-		MaxRetry:         gemini.RetryCount,
-		RetryIntervalSec: gemini.RetryIntervalSec,
 		ScreeningModel:   gemini.ScreeningModel,
 		SummarizingModel: gemini.SummarizingModel,
 		DownloadDir:      storage.DownloadDir,

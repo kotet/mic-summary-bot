@@ -25,7 +25,7 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
 | `title`        | TEXT      | NOT NULL                   | RSSアイテムのタイトル                                                                                                                           |
 | `published_at` | TIMESTAMP | NOT NULL                   | RSSアイテムの発行日時                                                                                                                           |
 | `status`       | INTEGER   | NOT NULL                   | アイテムの処理状態。`0`: unprocessed, `1`: deferred, `2`: pending, `3`: processed のいずれか。                                               |
-| `reason`       | INTEGER   | NULLABLE                   | `status`が `1` (deferred) または `3` (processed) になった場合の理由コード。                                                                    |
+| `reason`       | INTEGER   | NULLABLE                   | `status`が `1` (deferred) または `3` (processed) になった場合、および `2` (pending) のまま再試行となった場合の理由コード。                     |
 | `retry_count`  | INTEGER   | NOT NULL                   | 処理を試行したがエラーまたはスキップにより失敗した回数。一定回数以上の失敗が続いた場合、`status`を`processed`に変更する                         |
 | `created_at`      | TIMESTAMP | NOT NULL                   | レコードが作成された日時。                                                                                                                      |
 | `last_checked_at` | TIMESTAMP | NOT NULL                   | アイテムが最後に処理対象としてチェックされた日時。                                                                                              |
@@ -44,7 +44,7 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
     * `url`が既存のレコードと重複する場合、新規追加は行わない。
 
 2.  **アイテムの選択**:
-    * **要約処理**: `status`が`2` (`pending`) のアイテムの中から`published_at`が最も古いものを1件選択し、処理を試みる。
+    * **要約処理**: `status`が`2` (`pending`) のアイテムの中から`retry_count`が最も少なく、その中で`published_at`が最も古いものを1件選択し、処理を試みる。失敗し続けるアイテムが後続のアイテムの処理を止めないようにするため。
     * **スクリーニング処理**: `pending`のアイテムがない場合、`status`が`0` (`unprocessed`) の中から`published_at`が最も古いものまたは `1` (`deferred`) のアイテムの中から`last_checked_at`が最も古いものを1件選択し、処理を試みる。
 
 3.  **処理結果に応じた状態更新**:
@@ -58,12 +58,16 @@ RSSフィードから取得される各アイテムの状態と関連情報を�
         * `status`を`1` (`deferred`) に更新する。
         * `reason`に該当する`ItemReasonCode`を記録する。
         * `retry_count`をインクリメントする。
-    * **ファイルダウンロード失敗、Gemini API呼び出し失敗など**:
+    * **スクリーニング処理中のファイルダウンロード失敗、Gemini API呼び出し失敗など**:
         * `status`を`1` (`deferred`) に更新する。
-        * `reason`に該当する`ItemReasonCode`
+        * `reason`に該当する`ItemReasonCode`を記録する。
+        * `retry_count`をインクリメントする。
+    * **要約処理中のファイルダウンロード失敗、Gemini/Mastodon API呼び出し失敗など**:
+        * `status`は`2` (`pending`) のまま変更しない。スクリーニング済みのアイテムを再スクリーニングしないため。
+        * `reason`に該当する`ItemReasonCode`を記録する。
         * `retry_count`をインクリメントする。
     * **リトライ回数上限超過**:
-        * `retry_count`をインクリメントした結果、設定された上限値 (`database.max_deferred_retry_count`) に達した場合、`deferred`の代わりに`status`を`3` (`processed`) に更新する。
+        * `retry_count`をインクリメントした結果、設定された上限値 (`database.max_deferred_retry_count`) に達した場合、`deferred`または`pending`の代わりに`status`を`3` (`processed`) に更新する。
         * `reason`に`6` (`ReasonRetryLimitExceeded`) を記録する。
 
 4.  **処理済みアイテムの扱い**:

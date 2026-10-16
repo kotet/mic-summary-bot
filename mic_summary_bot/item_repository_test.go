@@ -453,6 +453,23 @@ func TestItemRepository_GetItemForSummarization(t *testing.T) {
 		assert.Equal(t, itemOlder.URL, item.URL)
 	})
 
+	t.Run("item with fewer retries is preferred over older published item", func(t *testing.T) {
+		repo, cleanup := setupTestDB(t)
+		defer cleanup()
+
+		itemOlderRetried := createTestItem("http://example.com/pendingOldRetried", StatusPending, baseTime.Add(-2*time.Hour), baseTime, 1, "POldRetried")
+		itemNewerFresh := createTestItem("http://example.com/pendingNewFresh", StatusPending, baseTime.Add(-1*time.Hour), baseTime, 0, "PNewFresh")
+		err := repo.insert(context.Background(), itemOlderRetried)
+		require.NoError(t, err)
+		err = repo.insert(context.Background(), itemNewerFresh)
+		require.NoError(t, err)
+
+		item, err := repo.GetItemForSummarization(context.Background())
+		require.NoError(t, err)
+		require.NotNil(t, item)
+		assert.Equal(t, itemNewerFresh.URL, item.URL)
+	})
+
 	t.Run("last_checked_at is updated when item is retrieved", func(t *testing.T) {
 		repo, cleanup := setupTestDB(t)
 		defer cleanup()

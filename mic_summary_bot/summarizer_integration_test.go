@@ -36,8 +36,6 @@ func TestSummarizeDocument(t *testing.T) {
 	// For this test, we construct it directly to control dependencies.
 	client := &GenAIClient{
 		Client:           genaiClient,
-		MaxRetry:         config.Gemini.RetryCount,
-		RetryIntervalSec: config.Gemini.RetryIntervalSec,
 		ScreeningModel:   config.Gemini.ScreeningModel,
 		SummarizingModel: config.Gemini.SummarizingModel,
 		DownloadDir:      t.TempDir(), // Use a temporary directory for downloads

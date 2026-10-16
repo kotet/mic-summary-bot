@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
-	"time"
 
 	"google.golang.org/genai"
 )
@@ -88,19 +87,11 @@ func (client *GenAIClient) IsWorthSummarizing(htmlAndDocs *HTMLandDocuments, pro
 	parts = append(parts, genai.NewPartFromText(prompt))
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
 
-	// LLMへのリクエストとリトライ処理
-	var resp *genai.GenerateContentResponse
-	for i := 0; i < client.MaxRetry+1; i++ {
-		resp, err = client.Client.Models.GenerateContent(ctx, client.ScreeningModel, contents, modelConfig)
-		if err == nil {
-			break // 成功したらループを抜ける
-		}
-		pkgLogger.Warn("Gemini API call failed", "attempt", i+1, "max_retry", client.MaxRetry+1, "error", err, "retrying_in_seconds", client.RetryIntervalSec)
-		time.Sleep(time.Duration(client.RetryIntervalSec) * time.Second)
-	}
-
+	// Gemini APIはレートリミットが厳しいため、失敗してもその場でリトライせずエラーを返す。
+	// 呼び出し元がアイテムを deferred にし、次回以降の実行で再処理する
+	resp, err := client.Client.Models.GenerateContent(ctx, client.ScreeningModel, contents, modelConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get response from Gemini API after %d retries: %w", client.MaxRetry, err)
+		return nil, fmt.Errorf("failed to get response from Gemini API: %w", err)
 	}
 
 	// レスポンスのパース
