@@ -221,6 +221,9 @@ func (r *ItemRepository) getItemWithStatusAndUpdateLastChecked(ctx context.Conte
 }
 
 // GetItemForSummarization は要約対象のアイテムを取得します。
+// retry_count が少ないものを優先し、同じ場合は published_at が古いものを選びます。
+// 要約・投稿に失敗したアイテムは pending のまま retry_count が増えるため、
+// 失敗し続けるアイテムが先頭に居座って後続の pending アイテムを止めることはありません。
 // 取得したアイテムのlast_checked_atを即座に更新します。
 func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, error) {
 	var item *Item
@@ -229,7 +232,7 @@ func (r *ItemRepository) GetItemForSummarization(ctx context.Context) (*Item, er
 			SELECT id, url, title, published_at, status, reason, retry_count, created_at, last_checked_at
 			FROM items
 			WHERE status = ?
-			ORDER BY published_at ASC
+			ORDER BY retry_count ASC, published_at ASC
 			LIMIT 1;
 		`)
 

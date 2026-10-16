@@ -52,10 +52,12 @@ func NewMICSummaryBot(config *Config) (*MICSummaryBot, error) {
 	}, nil
 }
 
-// markItemDeferred は処理を先送りするアイテムの retry_count を増やし、status を deferred に変更する。
-// retry_count が maxDeferredRetryCount に達したアイテムは以後 deferred として選択されないため、
-// 代わりに processed (ReasonRetryLimitExceeded) に変更して ERROR ログを出す。DBへの保存は呼び出し元が行う
-func markItemDeferred(item *Item, reason ItemReasonCode, maxDeferredRetryCount int) {
+// markItemForRetry は後で再試行するアイテムの retry_count を増やし、status を retryStatus に変更する。
+// スクリーニング段階のアイテムは deferred、スクリーニング済み (要約・投稿段階) のアイテムは pending を指定する。
+// pending のまま再試行することで、一時的な失敗のたびに再スクリーニングが走るのを避ける。
+// retry_count が maxDeferredRetryCount に達したアイテムは processed (ReasonRetryLimitExceeded) に変更して ERROR ログを出す。
+// DBへの保存は呼び出し元が行う
+func markItemForRetry(item *Item, retryStatus ItemStatus, reason ItemReasonCode, maxDeferredRetryCount int) {
 	item.RetryCount++
 	if item.RetryCount >= maxDeferredRetryCount {
 		pkgLogger.Error("Retry limit exceeded, skipping item", "url", item.URL, "retry_count", item.RetryCount, "last_reason", reason)
@@ -63,15 +65,15 @@ func markItemDeferred(item *Item, reason ItemReasonCode, maxDeferredRetryCount i
 		item.Reason = ReasonRetryLimitExceeded
 		return
 	}
-	item.Status = StatusDeferred
+	item.Status = retryStatus
 	item.Reason = reason
 }
 
-// setItemToDeferred はエラーをログに出し、アイテムを deferred (リトライ上限に達した場合は processed) に更新するヘルパー関数
+// setItemForRetry はエラーをログに出し、アイテムを retryStatus (リトライ上限に達した場合は processed) に更新するヘルパー関数
 // エラー処理の共通化により、コードの重複を避け、保守性を向上させる
-func (b *MICSummaryBot) setItemToDeferred(ctx context.Context, item *Item, reason ItemReasonCode, originalErr error, logMsg string) {
+func (b *MICSummaryBot) setItemForRetry(ctx context.Context, item *Item, retryStatus ItemStatus, reason ItemReasonCode, originalErr error, logMsg string) {
 	pkgLogger.Error(logMsg, "url", item.URL, "error", originalErr)
-	markItemDeferred(item, reason, b.config.Database.MaxDeferredRetryCount)
+	markItemForRetry(item, retryStatus, reason, b.config.Database.MaxDeferredRetryCount)
 	if updateErr := b.itemRepository.Update(ctx, item); updateErr != nil {
 		pkgLogger.Error("Failed to update item status after processing error", "url", item.URL, "original_error_context", logMsg, "update_error", updateErr)
 	}
@@ -124,7 +126,7 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	pkgLogger.Debug("Starting HTML parsing", "url", item.URL)
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
-		b.setItemToDeferred(ctx, item, ReasonDownloadFailed, err, "Failed to parse HTML")
+		b.setItemForRetry(ctx, item, StatusPending, ReasonDownloadFailed, err, "Failed to parse HTML")
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 	pkgLogger.Debug("HTML parsing completed successfully", "url", item.URL)
@@ -132,14 +134,14 @@ func (b *MICSummaryBot) PostSummary(ctx context.Context) (err error) {
 	pkgLogger.Debug("Starting document summarization", "url", item.URL)
 	summary, err := b.genAIClient.SummarizeDocument(htmlAndDocs, b.config.Gemini.SummarizingPrompt)
 	if err != nil {
-		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to summarize content")
+		b.setItemForRetry(ctx, item, StatusPending, ReasonAPIFailed, err, "Failed to summarize content")
 		return fmt.Errorf("failed to summarize content: %w", err)
 	}
 	pkgLogger.Debug("Document summarization completed", "url", item.URL)
 
 	pkgLogger.Debug("Starting Mastodon post", "url", item.URL)
 	if err := b.mastodonClient.PostSummary(ctx, *item, summary); err != nil {
-		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to post to Mastodon")
+		b.setItemForRetry(ctx, item, StatusPending, ReasonAPIFailed, err, "Failed to post to Mastodon")
 		return fmt.Errorf("failed to post to mastodon: %w", err)
 	}
 	pkgLogger.Debug("Mastodon post completed successfully", "url", item.URL)
@@ -178,13 +180,13 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 
 	htmlAndDocs, err := GetHTMLSummary(item.URL)
 	if err != nil {
-		b.setItemToDeferred(ctx, item, ReasonDownloadFailed, err, "Failed to parse HTML")
+		b.setItemForRetry(ctx, item, StatusDeferred, ReasonDownloadFailed, err, "Failed to parse HTML")
 		return fmt.Errorf("failed to parse html: %w", err)
 	}
 
 	screeningResult, err := b.genAIClient.IsWorthSummarizing(htmlAndDocs, b.config.Gemini.ScreeningPrompt)
 	if err != nil {
-		b.setItemToDeferred(ctx, item, ReasonAPIFailed, err, "Failed to screen item")
+		b.setItemForRetry(ctx, item, StatusDeferred, ReasonAPIFailed, err, "Failed to screen item")
 		return fmt.Errorf("failed to screen item: %w", err)
 	}
 	pkgLogger.Info("Item screening result", "url", item.URL, "result", screeningResult.FinalResult)
@@ -205,7 +207,7 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 			return fmt.Errorf("failed to post no value message to mastodon: %w", err)
 		}
 	case WorthSummarizingWait:
-		markItemDeferred(item, ReasonGeminiPageNotReady, b.config.Database.MaxDeferredRetryCount)
+		markItemForRetry(item, StatusDeferred, ReasonGeminiPageNotReady, b.config.Database.MaxDeferredRetryCount)
 		if err := b.itemRepository.Update(ctx, item); err != nil {
 			return fmt.Errorf("failed to mark as not ready: %w", err)
 		}
@@ -213,7 +215,7 @@ func (b *MICSummaryBot) ScreenItem(ctx context.Context) (err error) {
 		// スキーマに反する値や空文字が返った場合、unprocessed のまま残すと同じアイテムが毎回選ばれ
 		// 後続のアイテムが判定されなくなるため、deferred にしてリトライ上限の仕組みに乗せる
 		unexpectedResultErr := fmt.Errorf("unexpected screening result: %q", screeningResult.FinalResult)
-		b.setItemToDeferred(ctx, item, ReasonAPIFailed, unexpectedResultErr, "Unexpected screening result")
+		b.setItemForRetry(ctx, item, StatusDeferred, ReasonAPIFailed, unexpectedResultErr, "Unexpected screening result")
 		return unexpectedResultErr
 	}
 

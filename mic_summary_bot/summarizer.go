@@ -10,7 +10,6 @@ import (
 	"path"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/genai"
@@ -241,24 +240,14 @@ func (client *GenAIClient) SummarizeDocument(htmlAndDocs *HTMLandDocuments, prom
 
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
 
-	// LLMへのリクエストとリトライ処理
-	pkgLogger.Info("Starting Gemini API calls with retry", "max_retry", client.MaxRetry+1)
-	var resp *genai.GenerateContentResponse
-	for i := 0; i < client.MaxRetry+1; i++ {
-		pkgLogger.Debug("Calling Gemini API", "attempt", i+1, "model", client.SummarizingModel)
-		resp, err = client.Client.Models.GenerateContent(ctx, client.SummarizingModel, contents, modelConfig)
-		if err == nil {
-			pkgLogger.Debug("Gemini API call succeeded", "attempt", i+1)
-			break // 成功したらループを抜ける
-		}
-		pkgLogger.Warn("Gemini API call failed", "attempt", i+1, "max_retry", client.MaxRetry+1, "error", err, "retrying_in_seconds", client.RetryIntervalSec)
-		time.Sleep(time.Duration(client.RetryIntervalSec) * time.Second)
-	}
-
+	// Gemini APIはレートリミットが厳しいため、失敗してもその場でリトライせずエラーを返す。
+	// 呼び出し元がアイテムを deferred にし、次回以降の実行で再処理する
+	pkgLogger.Debug("Calling Gemini API", "model", client.SummarizingModel)
+	resp, err := client.Client.Models.GenerateContent(ctx, client.SummarizingModel, contents, modelConfig)
 	if err != nil {
-		pkgLogger.Error("All Gemini API calls failed", "total_attempts", client.MaxRetry+1, "error", err)
-		return SummarizeResult{}, fmt.Errorf("failed to get response from Gemini API after %d retries: %w", client.MaxRetry, err)
+		return SummarizeResult{}, fmt.Errorf("failed to get response from Gemini API: %w", err)
 	}
+	pkgLogger.Debug("Gemini API call succeeded")
 
 	// レスポンスのパース
 	if err := validateGeneratedContent(resp); err != nil {

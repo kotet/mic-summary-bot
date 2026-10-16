@@ -8,24 +8,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestMarkItemDeferred は retry_count が上限に達するまでは deferred、達したら processed (ReasonRetryLimitExceeded) になることを確認する。
-func TestMarkItemDeferred(t *testing.T) {
+// TestMarkItemForRetry は retry_count が上限に達するまでは指定した status、達したら processed (ReasonRetryLimitExceeded) になることを確認する。
+func TestMarkItemForRetry(t *testing.T) {
 	tests := []struct {
 		name           string
+		retryStatus    ItemStatus
 		retryCount     int
 		wantRetryCount int
 		wantStatus     ItemStatus
 		wantReason     ItemReasonCode
 	}{
-		{"below limit", 0, 1, StatusDeferred, ReasonAPIFailed},
-		{"just below limit", 1, 2, StatusDeferred, ReasonAPIFailed},
-		{"reaches limit", 2, 3, StatusProcessed, ReasonRetryLimitExceeded},
-		{"already over limit", 5, 6, StatusProcessed, ReasonRetryLimitExceeded},
+		{"deferred below limit", StatusDeferred, 0, 1, StatusDeferred, ReasonAPIFailed},
+		{"deferred just below limit", StatusDeferred, 1, 2, StatusDeferred, ReasonAPIFailed},
+		{"pending below limit", StatusPending, 0, 1, StatusPending, ReasonAPIFailed},
+		{"pending just below limit", StatusPending, 1, 2, StatusPending, ReasonAPIFailed},
+		{"deferred reaches limit", StatusDeferred, 2, 3, StatusProcessed, ReasonRetryLimitExceeded},
+		{"pending reaches limit", StatusPending, 2, 3, StatusProcessed, ReasonRetryLimitExceeded},
+		{"already over limit", StatusDeferred, 5, 6, StatusProcessed, ReasonRetryLimitExceeded},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := &Item{Status: StatusUnprocessed, RetryCount: tt.retryCount}
-			markItemDeferred(item, ReasonAPIFailed, 3)
+			markItemForRetry(item, tt.retryStatus, ReasonAPIFailed, 3)
 			assert.Equal(t, tt.wantRetryCount, item.RetryCount)
 			assert.Equal(t, tt.wantStatus, item.Status)
 			assert.Equal(t, tt.wantReason, item.Reason)

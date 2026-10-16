@@ -28,8 +28,6 @@ type RSSConfig struct {
 type GeminiConfig struct {
 	APIKey            string `yaml:"api_key"`
 	MaxTokens         int    `yaml:"max_tokens"`
-	RetryCount        int    `yaml:"retry_count"`
-	RetryIntervalSec  int    `yaml:"retry_interval_sec"`
 	ScreeningModel    string `yaml:"screening_model"`
 	ScreeningPrompt   string `yaml:"screening_prompt"`
 	SummarizingModel  string `yaml:"summarizing_model"`
@@ -52,7 +50,7 @@ type StorageConfig struct {
 
 type DatabaseConfig struct {
 	Path string `yaml:"path"`
-	// MaxDeferredRetryCount は deferred のアイテムを再処理する回数の上限。1以上でなければならない
+	// MaxDeferredRetryCount は deferred のアイテム、および要約・投稿に失敗した pending のアイテムを再処理する回数の上限。1以上でなければならない
 	MaxDeferredRetryCount int `yaml:"max_deferred_retry_count"`
 }
 

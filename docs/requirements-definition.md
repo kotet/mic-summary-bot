@@ -100,8 +100,8 @@
     * Goのコード内でRSSアイテムのタイトル、前回記事のタイトル情報、ページURLやファイル名などを含む文字列をプロンプトに組み込み、「要約する価値」「価値がない」「まだページが完成していない」を判定。
   * **リトライ・タイムアウト**:
 
-    * `config`に `gemini.retry_count`（例: 3回）、`gemini.retry_interval_sec`（例: 5秒）を設定可能。
-    * API呼び出しが失敗した場合はGoのリトライ処理を行い、それでも失敗したら `log` パッケージで出力して当該アイテムをスキップ。
+    * Gemini APIはレートリミットが厳しいため、API呼び出しが失敗してもその場でのリトライは行わない。
+    * 失敗した場合は `log` パッケージで出力し、次回以降の実行で再処理する。スクリーニング中の失敗は当該アイテムを先送り（deferred）にし、スクリーニング済みのアイテムの要約・投稿中の失敗は処理待ち（pending）のまま残して再スクリーニングを避ける。再処理回数の上限は `database.max_deferred_retry_count` で設定する。
   * **ファイル送信失敗時**:
 
     * ファイルサイズが50MBを超えた場合、価値判定処理と要約処理にはファイル名と「ファイルサイズが大きすぎるため要約できない」旨を渡す。
@@ -232,8 +232,6 @@ type Config struct {
     Model            string `yaml:"model"`             // 利用モデル名
     MaxTokens        int    `yaml:"max_tokens"`        // 要約最大トークン数
     SummaryStyle     string `yaml:"summary_style"`     // "paragraph"
-    RetryCount       int    `yaml:"retry_count"`       // リトライ回数
-    RetryIntervalSec int    `yaml:"retry_interval_sec"`// リトライ間隔（秒）
   } `yaml:"gemini"`
 
   Mastodon struct {
